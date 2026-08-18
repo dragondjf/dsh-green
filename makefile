@@ -10,14 +10,27 @@ TEMP_DIR := $(CURDIR)/.temp-build
 # dsh 依赖要求 node >= 22.19.0，见仓库 AGENTS.md（node ^22.19 || >=24）
 NODE_VERSION := v22.19.0
 
+# ---------- 包管理器 ----------
+# npm 全局安装很慢，默认改用 pnpm（node 自带 corepack，hoisted 扁平结构更快）。
+# 回退: make PKG_MANAGER=npm ... 使用原有 npm 全局安装流程
+PKG_MANAGER ?= pnpm
+AGFS_PKG := @open-agfs/dsh-agfs@0.1.9
+PNPM_DEPS := $(TEMP_DIR)/pnpm-deps
+PNPM_MODULES := $(PNPM_DEPS)/node_modules
+
 # ---------- Win7 支持 ----------
 # 通过 `make win7` 显式启用（在任意系统上交叉构建 Win7 安装包）
 TARGET_PLATFORM :=
 WIN7_DIR := $(CURDIR)/win7
 WIN7_NODE_ZIP := $(WIN7_DIR)/node-v22.22.3-win-x64.zip
 WIN7_RG_ZIP := $(WIN7_DIR)/rg-13.0.0.zip
-# rg 替换目标：DSH 内置的 ripgrep（参考 win7/rg-13.0.0-帮助手册.html §6）
-WIN7_RG_DEST := $(PACK_DIR)/node_modules/@deepseek-ai/dsh/node_modules/@vscode/ripgrep-win32-x64/bin/rg.exe
+# rg 替换目标：DSH 内置的 ripgrep（参考 win7/rg-13.0.0-帮助手册.html §6）。
+# npm 全局安装时 ripgrep 嵌套在 dsh 内部；pnpm hoisted 时提升到顶层
+ifeq ($(PKG_MANAGER),pnpm)
+    WIN7_RG_DEST := $(PACK_DIR)/node_modules/@vscode/ripgrep-win32-x64/bin/rg.exe
+else
+    WIN7_RG_DEST := $(PACK_DIR)/node_modules/@deepseek-ai/dsh/node_modules/@vscode/ripgrep-win32-x64/bin/rg.exe
+endif
 
 # ---------- Robust Directory Removal ----------
 # Windows 下 MSYS 的 rm -rf 对 npm 处理过的目录可能报 Permission denied，
@@ -84,6 +97,13 @@ ifeq ($(TARGET_PLATFORM),win7)
     NODE_PLATFORM := win-x64
     # 指定本地 node 压缩包，download-node 将直接解压
     NODE_LOCAL_ZIP := $(WIN7_NODE_ZIP)
+endif
+
+# ---------- Corepack (pnpm) ----------
+ifeq ($(PLATFORM),windows)
+    COREPACK := $(TEMP_DIR)/node/node_modules/corepack/dist/corepack.js
+else
+    COREPACK := $(TEMP_DIR)/node/lib/node_modules/corepack/dist/corepack.js
 endif
 
 # ---------- Targets ----------
@@ -177,16 +197,33 @@ prepare-node: download-node
 	@echo "Node.js ready"
 
 # ---------- Install dsh ----------
+ifeq ($(PKG_MANAGER),pnpm)
 install-dsh: prepare-node
-	@echo "Installing @deepseek-ai/dsh..."
+	@echo "Installing @deepseek-ai/dsh + $(AGFS_PKG) (pnpm)..."
+	@echo "  This may take a few minutes..."
+	@mkdir -p "$(PNPM_DEPS)"
+	@echo '{"name":"dsh-build","private":true}' > "$(PNPM_DEPS)/package.json"
+	@cd "$(PNPM_DEPS)" && \
+	if [ "$(PLATFORM)" = "windows" ]; then \
+		"$(TEMP_DIR)/node/node.exe" "$(subst \,/,$(COREPACK))" pnpm add @deepseek-ai/dsh $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy 2>&1; \
+	else \
+		"$(TEMP_DIR)/node/bin/node" "$(subst \,/,$(COREPACK))" pnpm add @deepseek-ai/dsh $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy 2>&1; \
+	fi
+	@echo "@deepseek-ai/dsh + $(AGFS_PKG) installed (pnpm)"
+else
+install-dsh: prepare-node
+	@echo "Installing @deepseek-ai/dsh (npm)..."
 	@echo "  This may take a few minutes..."
 	@cd "$(TEMP_DIR)/node" && \
 	if [ "$(PLATFORM)" = "windows" ]; then \
 		./node.exe ./node_modules/npm/bin/npm-cli.js install -g @deepseek-ai/dsh 2>&1; \
+		./node.exe ./node_modules/npm/bin/npm-cli.js install -g $(AGFS_PKG) --legacy-peer-deps 2>&1; \
 	else \
 		./bin/node ./bin/npm install -g @deepseek-ai/dsh 2>&1; \
+		./bin/node ./bin/npm install -g $(AGFS_PKG) --legacy-peer-deps 2>&1; \
 	fi
-	@echo "@deepseek-ai/dsh installed"
+	@echo "@deepseek-ai/dsh + $(AGFS_PKG) installed (npm)"
+endif
 
 # ---------- Pack ----------
 pack: install-dsh
@@ -207,6 +244,53 @@ pack: install-dsh
 	fi
 
 	@echo "Copying dsh and dependencies..."
+ifeq ($(PKG_MANAGER),pnpm)
+	@echo "  (pnpm hoisted: copying all top-level packages)"
+	@if [ "$(PLATFORM)" = "windows" ]; then \
+		cd "$(TEMP_DIR)/node" && ./node.exe -e " \
+			const fs = require('fs'); \
+			const path = require('path'); \
+			const { execSync } = require('child_process'); \
+			const src = '$(subst \,/,$(PNPM_MODULES))'; \
+			const dst = '$(subst \,/,$(NODE_MODULES))'; \
+			if (!fs.existsSync(src)) { console.error('  ERROR: pnpm modules not found: ' + src); process.exit(1); } \
+			for (const name of fs.readdirSync(src)) { \
+				if (name === '.pnpm' || name === '.bin' || name === '.modules.yaml') continue; \
+				const srcPath = path.join(src, name); \
+				const dstPath = path.join(dst, name); \
+				if (!fs.existsSync(dstPath)) { \
+					console.log('  Copying:', name); \
+					try { \
+						execSync('xcopy /q /e /i /y \"' + srcPath + '\" \"' + dstPath + '\"', { stdio: 'pipe', maxBuffer: 256 * 1024 * 1024 }); \
+					} catch(e) { console.warn('  Failed:', name); } \
+				} \
+			} \
+			console.log('  Dependencies copied'); \
+		"; \
+	else \
+		cd "$(TEMP_DIR)/node/bin" && ./node -e " \
+			const fs = require('fs'); \
+			const path = require('path'); \
+			const { execSync } = require('child_process'); \
+			const src = '$(PNPM_MODULES)'; \
+			const dst = '$(NODE_MODULES)'; \
+			if (!fs.existsSync(src)) { console.error('  ERROR: pnpm modules not found: ' + src); process.exit(1); } \
+			for (const name of fs.readdirSync(src)) { \
+				if (name === '.pnpm' || name === '.bin' || name === '.modules.yaml') continue; \
+				const srcPath = path.join(src, name); \
+				const dstPath = path.join(dst, name); \
+				if (!fs.existsSync(dstPath)) { \
+					console.log('  Copying:', name); \
+					try { \
+						execSync('cp -r \"' + srcPath + '\" \"' + dstPath + '\"', { stdio: 'pipe' }); \
+					} catch(e) { console.warn('  Failed:', name); } \
+				} \
+			} \
+			console.log('  Dependencies copied'); \
+		"; \
+	fi
+else
+	@echo "  (npm global mode)"
 	@if [ "$(PLATFORM)" = "windows" ]; then \
 		cd "$(TEMP_DIR)/node" && ./node.exe -e " \
 			const fs = require('fs'); \
@@ -235,6 +319,15 @@ pack: install-dsh
 						} catch(e) { console.warn('  Failed:', dep); } \
 					} \
 				} \
+			} \
+			const agfsSrc = path.join(globalModules, '@open-agfs', 'dsh-agfs'); \
+			const agfsDest = path.join(dshDest, 'node_modules', '@open-agfs', 'dsh-agfs'); \
+			if (fs.existsSync(agfsSrc)) { \
+				console.log('  Copying: @open-agfs/dsh-agfs'); \
+				try { \
+					const { execSync } = require('child_process'); \
+					execSync('xcopy /q /e /i /y \"' + agfsSrc + '\" \"' + agfsDest + '\"', { stdio: 'pipe', maxBuffer: 256 * 1024 * 1024 }); \
+				} catch(e) { console.warn('  Failed: @open-agfs/dsh-agfs'); } \
 			} \
 			console.log('  Dependencies copied'); \
 		"; \
@@ -267,9 +360,19 @@ pack: install-dsh
 					} \
 				} \
 			} \
+			const agfsSrc = path.join(globalModules, '@open-agfs', 'dsh-agfs'); \
+			const agfsDest = path.join(dshDest, 'node_modules', '@open-agfs', 'dsh-agfs'); \
+			if (fs.existsSync(agfsSrc)) { \
+				console.log('  Copying: @open-agfs/dsh-agfs'); \
+				try { \
+					const { execSync } = require('child_process'); \
+					execSync('cp -r \"' + agfsSrc + '\" \"' + agfsDest + '\"', { stdio: 'pipe' }); \
+				} catch(e) { console.warn('  Failed: @open-agfs/dsh-agfs'); } \
+			} \
 			console.log('  Dependencies copied'); \
 		"; \
 	fi
+endif
 
 	# Generate startup script
 	@echo "Generating startup scripts..."
