@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WMF 5.1（Windows PowerShell 5.1）安装手册</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --ink: #1f2328;
+    --muted: #57606a;
+    --accent: #0a66c2;
+    --accent-soft: #e7f1fb;
+    --ok: #1a7f37;
+    --warn: #9a6700;
+    --err: #cf222e;
+    --code-bg: #f6f8fa;
+    --border: #d0d7de;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    line-height: 1.65;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 20px 60px; }
+  header.hero {
+    background: linear-gradient(135deg, #0a66c2, #05498a);
+    color: #fff;
+    border-radius: 12px;
+    padding: 28px 30px;
+    margin-bottom: 24px;
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 26px; }
+  header.hero p { margin: 0; opacity: .92; font-size: 14px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 18px;
+  }
+  h2 {
+    font-size: 19px;
+    margin: 4px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--accent-soft);
+  }
+  h3 { font-size: 15px; margin: 18px 0 8px; }
+  code, pre {
+    font-family: Consolas, "Courier New", monospace;
+    background: var(--code-bg);
+    border-radius: 5px;
+    font-size: 13px;
+  }
+  code { padding: 1px 5px; }
+  pre {
+    padding: 12px 14px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  pre .c { color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+  th { background: var(--code-bg); }
+  .pill {
+    display: inline-block;
+    padding: 1px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .pill.ok   { background: #dafbe1; color: var(--ok); }
+  .pill.warn { background: #fff8c5; color: var(--warn); }
+  .pill.err  { background: #ffebe9; color: var(--err); }
+  .pill.info { background: var(--accent-soft); color: var(--accent); }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps > li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 42px;
+    margin: 10px 0;
+  }
+  .steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 2px;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    text-align: center;
+    line-height: 26px;
+    font-size: 13px;
+  }
+  .note {
+    border-left: 4px solid var(--warn);
+    background: #fffdf5;
+    padding: 10px 14px;
+    border-radius: 0 6px 6px 0;
+    margin: 12px 0;
+    font-size: 13.5px;
+  }
+  .note.err { border-color: var(--err); background: #fff5f5; }
+  .note.ok  { border-color: var(--ok); background: #f4fff6; }
+  .path { font-weight: 600; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 30px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>WMF 5.1 安装手册</h1>
+  <p>Windows Management Framework 5.1 ／ Windows PowerShell 5.1 —— 随 DeepSeek Harness 绿色包捆绑的依赖安装说明（Windows 7 SP1 x64）</p>
+</header>
+
+<div class="card">
+  <h2>📦 捆绑安装程序信息</h2>
+  <table>
+    <tr><th>组件</th><td>Windows Management Framework 5.1（将 Windows PowerShell 升级到 5.1）</td></tr>
+    <tr><th>补丁编号</th><td>KB3191566（Win7 SP1 / Windows Server 2008 R2 SP1，x64）</td></tr>
+    <tr><th>安装程序位置</th><td class="path">bin\Win7AndW2K8R2-KB3191566-x64.msu</td></tr>
+    <tr><th>绝对路径</th><td class="path">C:\Users\yfjz\Downloads\dsh-web-0.1.0-rc.5-win32-x64\bin\Win7AndW2K8R2-KB3191566-x64.msu</td></tr>
+    <tr><th>文件大小</th><td>约 64.9 MB</td></tr>
+    <tr><th>数字签名</th><td><span class="pill ok">有效</span> CN=Microsoft Corporation（可自行用 <code>Get-AuthenticodeSignature</code> 复核）</td></tr>
+    <tr><th>官方下载页</th><td><a href="https://www.microsoft.com/en-us/download/details.aspx?id=54616">Microsoft Download Center – WMF 5.1</a></td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>1. 为什么需要它</h2>
+  <p>DeepSeek Harness（DSH）的 <code>pwsh</code> 工具通过 <code>powershell.exe</code> 执行命令。Windows 7 SP1 自带的 PowerShell 只有 <b>2.0</b>，存在两个实际问题：</p>
+  <ul>
+    <li><b>中文输出乱码</b>：DSH 会注入 <code>[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)</code> 强制 UTF-8，而 <code>::new()</code> 语法是 PS 5.0 才引入的，2.0 不支持，导致编码设定失败、中文变乱码。</li>
+    <li><b>stderr 噪音</b>：上述 preamble 在每条命令执行前都报两行 <code>MethodNotFound</code> 错误。</li>
+  </ul>
+  <p>安装 WMF 5.1（Win7 官方支持的最高 PowerShell 版本）即可同时解决这两点，并带来 <code>Get-CimInstance</code> 等现代 cmdlet。无需安装 pwsh 7（7.1+ 基于 .NET 5+，不支持 Windows 7；7.0 已停止维护）。</p>
+</div>
+
+<div class="card">
+  <h2>2. 适用系统与前置条件</h2>
+  <table>
+    <tr><th>系统</th><td>Windows 7 SP1（x64）／ Windows Server 2008 R2 SP1（x64）</td></tr>
+    <tr><th>.NET Framework</th><td>需要 4.5 或更高（本机已装 4.7.2，满足）。检查：<code>(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full').Release</code> 应 &ge; 378389</td></tr>
+    <tr><th>权限</th><td>需要<b>管理员权限</b>（标准用户安装时会弹出 UAC 凭据框，需要管理员账户的用户名和密码）</td></tr>
+    <tr><th>磁盘</th><td>需要约 1 GB 可用空间（安装过程有临时展开）</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>3. 安装步骤</h2>
+  <h3>方式 A：图形界面（推荐）</h3>
+  <ol class="steps">
+    <li>打开目录 <code class="path">C:\Users\yfjz\Downloads\dsh-web-0.1.0-rc.5-win32-x64\bin\</code></li>
+    <li>双击 <b>Win7AndW2K8R2-KB3191566-x64.msu</b></li>
+    <li>弹出 UAC 提示：标准用户输入管理员账户凭据，管理员账户点"是"</li>
+    <li>等待"Windows Update 独立安装程序"执行完毕（约 5–15 分钟，有进度条）</li>
+    <li>按提示<b>重启计算机</b>完成文件替换与引擎注册</li>
+  </ol>
+
+  <h3>方式 B：命令行（静默安装）</h3>
+  <p>以管理员身份打开命令提示符（开始菜单搜索 <code>cmd</code> → 右键 → 以管理员身份运行），执行：</p>
+  <pre>wusa.exe "C:\Users\yfjz\Downloads\dsh-web-0.1.0-rc.5-win32-x64\bin\Win7AndW2K8R2-KB3191566-x64.msu" /quiet /norestart</pre>
+  <p>返回码含义：<code>0</code> 成功；<code>3010</code> 成功但需重启；<code>2359302 (0x240006)</code> 需重启；<code>5</code> 权限不足；<code>0x80070643</code> 安装失败。</p>
+</div>
+
+<div class="card">
+  <h2>4. 标准用户（无管理员）说明</h2>
+  <div class="note err">
+    本机账户 <code>yfjz</code> 为<b>标准用户</b>（不在 Administrators 组），且内置 <code>Administrator</code> 账户默认被禁用。安装时必须在 UAC 凭据框中输入<b>任一管理员账户</b>的用户名和密码；若没有任何管理员凭据，则无法安装系统级组件，需先在安全模式下启用/重置管理员账户，或使用具备管理员权限的账户登录。
+  </div>
+  <p>从 DSH 内部无法可靠弹出 UAC 凭据框（Start-Process -Verb RunAs 会返回"拒绝访问"），因此在资源管理器中<b>手动双击 MSU</b> 是最可靠的安装方式。</p>
+</div>
+
+<div class="card">
+  <h2>5. 重启</h2>
+  <p>WMF 5.1 的文件替换、<code>powershell.exe</code> 版本切换与 PS 3.0 引擎注册在<b>重启后</b>才完成。重启前 QFE 补丁列表已可见 KB3191566，但 PowerShell 仍是 2.0，属正常现象。</p>
+</div>
+
+<div class="card">
+  <h2>6. 安装后验证</h2>
+  <p>重启后打开 PowerShell 执行以下命令，全部符合即安装成功：</p>
+  <pre>$PSVersionTable.PSVersion                 <span class="c"># 应显示 5.1.xxxxx</span>
+[System.Environment]::Version               <span class="c"># 应显示 4.0.30319.xxxxx</span>
+(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\PowerShell\3\PowerShellEngine').PowerShellVersion   <span class="c"># 5.1.xxxxx</span>
+Get-CimInstance Win32_OperatingSystem | Select-Object Caption   <span class="c"># 现代 cmdlet 可用</span>
+Write-Output '中文测试：你好，世界'          <span class="c"># 中文无乱码</span></pre>
+  <p>对应 DSH 的 <code>pwsh</code> 工具：每条命令不再出现 <code>[System.Text.UTF8Encoding]</code> 的 stderr 报错，中文输出正常。</p>
+</div>
+
+<div class="card">
+  <h2>7. 常见问题排查</h2>
+  <table>
+    <tr><th>现象</th><th>原因与处理</th></tr>
+    <tr><td>安装返回 0x80070643</td><td>安装失败。检查 .NET 4.5+ 是否安装、系统补丁是否齐全（建议先 Windows Update），再重试。</td></tr>
+    <tr><td>0x80240017 / 0x800f0826</td><td>"不适用"：可能已安装过 WMF 5.1，或系统/架构与包不匹配（本包仅 Win7/W2K8R2 x64）。</td></tr>
+    <tr><td>重启后仍是 2.0</td><td>重启未生效或安装未真正完成；确认 QFE 列表存在 KB3191566，再重启一次。</td></tr>
+    <tr><td>标准用户无法提权</td><td>需要管理员账户凭据；见第 4 节。</td></tr>
+    <tr><td>DSH pwsh 中文乱码 / ::new() 报错</td><td>说明实际引擎仍是 2.0，检查是否已重启。</td></tr>
+    <tr><td>DSH 沙箱模式下 pwsh 启动失败（乱码的"Windows PowerShell 初始化失败"）</td><td>沙箱受限令牌会阻止 PowerShell 读取注册表；将该会话切换到 <code>danger-full-access</code> 模式（/permission 或 设置 → General → 权限预设）。</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>8. 与 DSH 的集成说明</h2>
+  <ul>
+    <li>DSH 的 <code>pwsh</code> 工具每次调用都会新起 <code>powershell.exe</code> 进程，安装 WMF 5.1 并重启后<b>自动</b>使用 5.1，无需修改任何 DSH 配置。</li>
+    <li>本安装程序作为绿色包依赖存放在 <code>bin\</code> 目录，可随绿色包整体拷贝到其他 Win7 x64 机器离线安装。</li>
+    <li>文件完整性：可执行 <code>Get-AuthenticodeSignature "…\bin\Win7AndW2K8R2-KB3191566-x64.msu"</code>，<code>Status</code> 应为 <code>Valid</code>，签名者 CN=Microsoft Corporation。</li>
+  </ul>
+</div>
+
+<footer>DeepSeek Harness · WMF 5.1 安装手册 · 生成于 2026-08-17 · 离线可用的自包含 HTML 文档</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rg（ripgrep）帮助手册 · DSH Green Pack for Win7</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --card:#fff; --ink:#1f2328; --muted:#57606a;
+    --accent:#0a66c2; --accent-soft:#e7f1fb;
+    --ok:#1a7f37; --ok-bg:#dafbe1; --warn:#9a6700; --warn-bg:#fff8c5;
+    --err:#cf222e; --err-bg:#ffebe9;
+    --code-bg:#f6f8fa; --border:#d0d7de;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;line-height:1.65}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 20px 60px}
+  header.hero{background:linear-gradient(135deg,#7a4fbf,#4a2f7a);color:#fff;border-radius:12px;padding:28px 30px;margin-bottom:24px}
+  header.hero h1{margin:0 0 8px;font-size:26px}
+  header.hero p{margin:0;opacity:.92;font-size:14px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px 24px;margin-bottom:18px}
+  h2{font-size:19px;margin:4px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--accent-soft)}
+  h3{font-size:15px;margin:18px 0 8px}
+  code,pre{font-family:Consolas,"Courier New",monospace;background:var(--code-bg);border-radius:5px;font-size:12.5px}
+  code{padding:1px 5px}
+  pre{padding:12px 14px;overflow-x:auto;border:1px solid var(--border);white-space:pre-wrap;word-break:break-all}
+  pre .c{color:var(--muted)}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border:1px solid var(--border);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:var(--code-bg)}
+  .pill{display:inline-block;padding:1px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+  .pill.ok{background:var(--ok-bg);color:var(--ok)}
+  .pill.warn{background:var(--warn-bg);color:var(--warn)}
+  .pill.err{background:var(--err-bg);color:var(--err)}
+  .pill.info{background:var(--accent-soft);color:var(--accent)}
+  ul{padding-left:22px}
+  li{margin:4px 0}
+  .note{border-left:4px solid var(--warn);background:#fffdf5;padding:10px 14px;border-radius:0 6px 6px 0;margin:12px 0;font-size:13.5px}
+  .note.err{border-color:var(--err);background:#fff5f5}
+  .note.ok{border-color:var(--ok);background:#f4fff6}
+  footer{color:var(--muted);font-size:12px;text-align:center;margin-top:30px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>rg（ripgrep）帮助手册</h1>
+  <p>版本 13.0.0（rev af6b6c543b）· DSH Green Pack for Windows 7 · 离线自包含</p>
+</header>
+
+<div class="card">
+  <h2>📦 版本与来源信息</h2>
+  <table>
+    <tr><th>组件</th><td>ripgrep（rg）—— 快速递归正则搜索工具（Rust 编写）</td></tr>
+    <tr><th>本包版本</th><td><b>13.0.0</b>（rev af6b6c543b；编译 -SIMD -AVX，运行时 +SIMD +AVX）</td></tr>
+    <tr><th>为什么是 13 而不是 14</th><td>ripgrep 14.x 的官方预编译二进制在 <b>Windows 7 上启动即崩溃</b>（0xC0000005 访问冲突）；13.0.0 是 Win7 上实测可用的最后大版本（对照测试：13.0.0 正常，14.1.x 崩溃）</td></tr>
+    <tr><th>二进制位置</th><td class="path">node_modules\@deepseek-ai\dsh\node_modules\@vscode\ripgrep-win32-x64\bin\rg.exe</td></tr>
+    <tr><th>原始安装包</th><td class="path">bin\rg-13.0.0.zip（官方 ripgrep-13.0.0-x86_64-pc-windows-msvc.zip，1.7 MB）</td></tr>
+    <tr><th>原二进制备份</th><td class="path">…\ripgrep-win32-x64\bin\rg.exe.bak-rg14</td></tr>
+    <tr><th>官方主页</th><td><a href="https://github.com/BurntSushi/ripgrep">https://github.com/BurntSushi/ripgrep</a></td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>1. 基本用法</h2>
+  <pre>rg [选项] 模式 [路径...]              <span class="c"># 在路径中搜索模式</span>
+rg [选项] -e 模式 ... [路径...]        <span class="c"># 多个模式</span>
+rg [选项] -f 模式文件 ... [路径...]     <span class="c"># 从文件读取模式</span>
+rg [选项] --files [路径...]            <span class="c"># 只列出文件，不搜索</span>
+命令 | rg [选项] 模式                  <span class="c"># 从管道读取</span></pre>
+  <p>默认行为：递归搜索当前目录，<b>尊重 .gitignore</b>、自动跳过隐藏文件与二进制文件。</p>
+  <div class="note">模式以 <code>-</code> 开头时用 <code>-e</code> 或 <code>--</code> 分隔符，例如 <code>rg -e -foo</code> 或 <code>rg -- -foo</code>。</div>
+</div>
+
+<div class="card">
+  <h2>2. 常用示例</h2>
+  <pre><span class="c"># 搜索</span>
+rg "error" src/                          <span class="c"># 在 src 目录找 error</span>
+rg -i "todo" .                           <span class="c"># 忽略大小写</span>
+rg -l "pattern"                          <span class="c"># 只列出文件名</span>
+rg -c "pattern"                          <span class="c"># 统计每个文件的匹配数</span>
+rg -n "pattern"                          <span class="c"># 显示行号（默认已有）</span>
+rg -C 3 "pattern"                        <span class="c"># 上下文前后各 3 行（-A/-B 单独控制前后）</span>
+
+<span class="c"># 文件过滤</span>
+rg --files -g "*.js"                     <span class="c"># 列出所有 .js 文件</span>
+rg --files -g "!test/**"                 <span class="c"># 排除 test 目录</span>
+rg "pattern" -g "*.md"                   <span class="c"># 只在 .md 文件里搜</span>
+rg "pattern" -t js                       <span class="c"># 按类型搜索（rg --type-list 查看类型）</span>
+
+<span class="c"># 忽略规则与隐藏文件</span>
+rg "pattern" --no-ignore                 <span class="c"># 忽略 .gitignore</span>
+rg "pattern" --hidden                    <span class="c"># 包含隐藏文件/目录</span>
+rg "pattern" -uu                         <span class="c"># 完全不过滤（等价 --no-ignore --hidden --binary）</span>
+
+<span class="c"># 其他</span>
+rg --json "pattern"                      <span class="c"># JSON 输出（机器可读）</span>
+rg --sort modified --files               <span class="c"># 按修改时间排序文件列表</span>
+rg --type-list                          <span class="c"># 列出所有文件类型定义</span></pre>
+</div>
+
+<div class="card">
+  <h2>3. 在 DSH 工具内部是如何被调用的</h2>
+  <p>DSH 的 <code>glob</code> / <code>grep</code> 工具不自己搜索，而是以子进程调用本手册的 rg.exe，实际参数为：</p>
+  <pre>rg --no-config --files --glob=&lt;模式&gt; --sort=modified --no-ignore --hidden \
+   --glob=!**/.git --glob=!**/.git/** [路径]      <span class="c"># glob 工具</span>
+rg --no-config &lt;正则&gt; [路径] ...                 <span class="c"># grep 工具（按工具配置附加 --json 等）</span></pre>
+  <ul>
+    <li><code>--no-config</code>：忽略环境变量 <code>RIPGREP_CONFIG_PATH</code> 与 rg.conf，防止注入任意 <code>--pre</code> 预处理命令（安全考虑）。</li>
+    <li>退出码语义：<code>0</code> = 找到结果；<code>1</code> = 无匹配（正常）；其余 = 错误。</li>
+    <li>注意：<code>--no-ignore --hidden --sort=modified</code> 会<b>全量遍历</b>目录树再排序，在巨型 node_modules 目录上可能较慢（见 §5 性能提示）。</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>4. 关键参数速查</h2>
+  <table>
+    <tr><th>参数</th><th>说明</th></tr>
+    <tr><td><code>-e, --regexp &lt;PAT&gt;</code></td><td>指定模式（可多次，用于以 - 开头或多种模式）</td></tr>
+    <tr><td><code>-f, --file &lt;FILE&gt;</code></td><td>从文件读取模式（每行一个）</td></tr>
+    <tr><td><code>-i, --ignore-case</code></td><td>忽略大小写</td></tr>
+    <tr><td><code>-w, --word-regexp</code></td><td>整词匹配</td></tr>
+    <tr><td><code>-l, --files-with-matches</code></td><td>只输出匹配的文件名</td></tr>
+    <tr><td><code>-c, --count</code></td><td>输出每个文件的匹配次数</td></tr>
+    <tr><td><code>-n / -N</code></td><td>显示 / 不显示行号</td></tr>
+    <tr><td><code>-A/-B/-C &lt;NUM&gt;</code></td><td>匹配后 / 前 / 前后 NUM 行上下文</td></tr>
+    <tr><td><code>--files</code></td><td>只列出文件路径，不搜索内容</td></tr>
+    <tr><td><code>-g, --glob &lt;GLOB&gt;</code></td><td>文件过滤（可多次；<code>!</code> 前缀表示排除）</td></tr>
+    <tr><td><code>-t, --type &lt;TYPE&gt;</code></td><td>按文件类型过滤（<code>--type-list</code> 查看）</td></tr>
+    <tr><td><code>--no-ignore</code> / <code>--hidden</code></td><td>忽略 .gitignore / 包含隐藏文件</td></tr>
+    <tr><td><code>-u</code></td><td>减少过滤（-uu = 全不过滤）</td></tr>
+    <tr><td><code>--json</code></td><td>JSON 行输出（匹配/上下文/摘要）</td></tr>
+    <tr><td><code>--sort &lt;KEY&gt;</code></td><td>排序：none/path/modified/accessed/created</td></tr>
+    <tr><td><code>--max-count &lt;NUM&gt;</code></td><td>每文件最多匹配数</td></tr>
+    <tr><td><code>--max-depth &lt;NUM&gt;</code></td><td>最大递归深度</td></tr>
+    <tr><td><code>-m, --max-columns</code></td><td>单行最大输出宽度</td></tr>
+    <tr><td><code>--no-config</code></td><td>忽略配置文件与环境变量</td></tr>
+    <tr><td><code>-h / --help</code></td><td>简短 / 完整帮助</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>5. 性能与 Win7 注意事项</h2>
+  <ul>
+    <li><b>大目录树全量扫描</b>：<code>--no-ignore --hidden --sort=modified</code> 会遍历所有文件再排序。实测本机（Win7 + 机械盘）对整个工作区（含数万 node_modules 文件）的 <code>*.md</code> 列表约需 <b>26 秒</b>，接近 DSH 工具 30 秒超时上限。建议搜索时<b>限定路径或更精确的 glob</b>。</li>
+    <li><b>不要使用 rg 14.x</b>：若 rg.exe 被还原为 14.x（如 npm 重装依赖后），<code>rg --version</code> 会直接崩溃（退出码 -1073741819）。用 §6 方法重新替换。</li>
+    <li><b>替换后无需重启</b>：DSH 每次调用都新起 rg 进程，替换二进制即时生效。</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>6. 替换 / 还原二进制</h2>
+  <pre><span class="c"># 替换为 13.0.0（从本包 bin 的 zip 解压）</span>
+cd /d "%~dp0.."  <span class="c"># 到 dsh-green 根目录</span>
+mkdir rg13tmp &amp;&amp; tar -xf bin\rg-13.0.0.zip -C rg13tmp
+copy /y rg13tmp\rg.exe node_modules\@deepseek-ai\dsh\node_modules\@vscode\ripgrep-win32-x64\bin\rg.exe
+rd /s /q rg13tmp
+
+<span class="c"># 还原为原 14.x（备份）</span>
+copy /y node_modules\@deepseek-ai\dsh\node_modules\@vscode\ripgrep-win32-x64\bin\rg.exe.bak-rg14 ^
+      node_modules\@deepseek-ai\dsh\node_modules\@vscode\ripgrep-win32-x64\bin\rg.exe</pre>
+  <div class="note">zip 内实际路径为 <code>ripgrep-13.0.0-x86_64-pc-windows-msvc\rg.exe</code>（Win7 无 tar 时可参考绿色包手册中的 PowerShell 解压方式或用 7-Zip 等工具）。</div>
+</div>
+
+<div class="card">
+  <h2>7. 验证命令</h2>
+  <pre>rg --version                       <span class="c"># 应显示 ripgrep 13.0.0 且退出码 0</span>
+rg --no-config --files -g "*.md" . <span class="c"># 列出当前目录 .md 文件</span>
+rg "TODO" --count .                <span class="c"># 统计 TODO 出现次数</span></pre>
+  <p>预期：第一条输出 <code>ripgrep 13.0.0 (rev af6b6c543b)</code>；后两条正常返回，退出码 0 或 1（无匹配）。</p>
+</div>
+
+<footer>DSH Green Pack · rg 13.0.0 帮助手册 · 生成于 2026-08-17 · 离线可用的自包含 HTML 文档</footer>
+
+</div>
+</body>
+</html>
