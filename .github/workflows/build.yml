@@ -125,14 +125,9 @@ jobs:
         shell: bash
         run: |
           PACK_DIR="${{ steps.locate.outputs.pack_dir }}"
-          if [ "${{ matrix.target }}" = "win7" ]; then
-            # win7 用 node 22.22.3: @deepseek-ai/cordis-plugin-hmr 强制要求 --expose-internals.
-            # 但 node 拒绝在 NODE_OPTIONS env 里设此 flag, 故直接以 CLI 参数传给 win7 自带 node.
-            NODE_BIN="$PACK_DIR/node"
-            [ -f "$PACK_DIR/node.exe" ] && NODE_BIN="$PACK_DIR/node.exe"
-            CMD=("$NODE_BIN" --expose-internals "$PACK_DIR/node_modules/@deepseek-ai/dsh/lib/bin.js" web)
-          elif [ "${{ runner.os }}" = "Windows" ]; then
-            # Windows: 用 cmd /c 启动 .bat (git-bash 下最稳)
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            # Windows / win7: 用 cmd /c 启动 .bat (git-bash 下最稳)
+            # win7 的 run.bat 已自带 set NODE_OPTIONS=--expose-internals (makefile 生成)
             WIN_BAT="$(cygpath -w "$PACK_DIR/run.bat" 2>/dev/null || echo "$PACK_DIR/run.bat")"
             CMD=(cmd //c "$WIN_BAT")
           else

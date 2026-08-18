@@ -384,6 +384,9 @@ ifeq ($(PLATFORM),windows)
 	@echo "cd /d \"%BASE_DIR%\"" >> "$(PACK_DIR)/run.bat"
 	@echo "set PATH=%BASE_DIR%;%PATH%" >> "$(PACK_DIR)/run.bat"
 	@echo "set NODE_PATH=%BASE_DIR%node_modules" >> "$(PACK_DIR)/run.bat"
+ifeq ($(TARGET_PLATFORM),win7)
+	@echo "set NODE_OPTIONS=--expose-internals" >> "$(PACK_DIR)/run.bat"
+endif
 	@echo "echo ========================================" >> "$(PACK_DIR)/run.bat"
 	@echo "echo    DSH Green Pack" >> "$(PACK_DIR)/run.bat"
 	@echo "echo    Node: $(NODE_VERSION)" >> "$(PACK_DIR)/run.bat"
