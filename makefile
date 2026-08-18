@@ -202,13 +202,13 @@ install-dsh: prepare-node
 	@echo "Installing @deepseek-ai/dsh + $(AGFS_PKG) (pnpm)..."
 	@echo "  This may take a few minutes..."
 	@mkdir -p "$(PNPM_DEPS)"
-	@printf '{\n  "name": "dsh-build",\n  "private": true,\n  "pnpm": {\n    "onlyBuiltDependencies": ["@deepseek-ai/dsh-subprocess-local", "@google/genai", "koffi", "node-pty", "protobufjs"]\n  }\n}\n' > "$(PNPM_DEPS)/package.json"
-	@printf 'dangerously-allow-all-builds=true\n' > "$(PNPM_DEPS)/.npmrc"
+	@printf '{\n  "name": "dsh-build",\n  "private": true\n}\n' > "$(PNPM_DEPS)/package.json"
+	@printf 'dangerously-allow-all-builds=true\nonly-built-dependencies[]=@deepseek-ai/dsh-subprocess-local\nonly-built-dependencies[]=@google/genai\nonly-built-dependencies[]=koffi\nonly-built-dependencies[]=node-pty\nonly-built-dependencies[]=protobufjs\n' > "$(PNPM_DEPS)/.npmrc"
 	@cd "$(PNPM_DEPS)" && \
 	if [ "$(PLATFORM)" = "windows" ]; then \
-		"$(TEMP_DIR)/node/node.exe" "$(subst \,/,$(COREPACK))" pnpm add @deepseek-ai/dsh $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy 2>&1; \
+		"$(TEMP_DIR)/node/node.exe" "$(subst \,/,$(COREPACK))" pnpm add @deepseek-ai/dsh $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
 	else \
-		"$(TEMP_DIR)/node/bin/node" "$(subst \,/,$(COREPACK))" pnpm add @deepseek-ai/dsh $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy 2>&1; \
+		"$(TEMP_DIR)/node/bin/node" "$(subst \,/,$(COREPACK))" pnpm add @deepseek-ai/dsh $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
 	fi
 	@echo "@deepseek-ai/dsh + $(AGFS_PKG) installed (pnpm)"
 else
