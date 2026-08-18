@@ -116,15 +116,18 @@ jobs:
         run: |
           PACK_DIR="${{ steps.locate.outputs.pack_dir }}"
           if [ "${{ runner.os }}" = "Windows" ]; then
-            CMD="$PACK_DIR/run.bat"
+            # Windows: 用 cmd /c 启动 .bat (git-bash 下最稳)
+            CMD="cmd //c $(cygpath -w "$PACK_DIR/run.bat" 2>/dev/null || echo "$PACK_DIR/run.bat")"
           else
+            # Linux/macOS: bash 启动 .sh
             chmod +x "$PACK_DIR/run.sh"
-            CMD="$PACK_DIR/run.sh"
+            CMD="bash \"$PACK_DIR/run.sh\""
           fi
           echo "launching: $CMD"
           # 后台启动, 日志落盘便于诊断
-          nohup "$CMD" > e2e/${{ matrix.name }}/dsh.log 2>&1 &
+          nohup $CMD > e2e/${{ matrix.name }}/dsh.log 2>&1 &
           echo "pid=$!" >> "$GITHUB_OUTPUT"
+          echo "launched pid=$!"
 
       - name: Wait for DSH web (127.0.0.1:3080)
         shell: bash
