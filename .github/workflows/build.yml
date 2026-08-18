@@ -1,0 +1,104 @@
+# ============================================================
+# DSH Green Pack - CI Build & Release
+# ============================================================
+# 触发:
+#   - push tag v*          -> 构建全部平台 + 自动创建 GitHub Release
+#   - workflow_dispatch     -> 仅构建产物(不上 Release), 用于调试/重跑
+# 说明:
+#   makefile 自带 Node 下载(corepack/pnpm)与平台检测,
+#   本工作流只需提供 runner + make + 网络(npm registry)。
+#   win7 任务跑在 windows-latest: makefile 的 win7 zip 在 Windows 上走
+#   Compress-Archive 兜底, 才能产出真正的 .zip (GNU tar 不支持写 zip)。
+# ============================================================
+
+name: Build DSH Green Pack
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# 同一 ref 并发去重; tag 唯一故互不取消, dispatch 重跑会取消旧 run
+concurrency:
+  group: dsh-green-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # 用于 softprops/action-gh-release 创建 Release
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    # 全部用 bash(git bash on Windows)保证 make/unzip/tar 可用
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-latest
+            target: archive
+            asset: dsh-green-linux-v22.19.0.tar.gz
+          - name: darwin-arm64
+            os: macos-latest
+            target: archive
+            asset: dsh-green-darwin-v22.19.0.tar.gz
+          - name: windows-x64
+            os: windows-latest
+            target: archive
+            asset: dsh-green-windows-v22.19.0.tar.gz
+          - name: win7-x64
+            os: windows-latest
+            target: win7
+            asset: dsh-green-win7-v22.22.3.zip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure unzip available
+        # makefile 解压 Node 需要 unzip; ubuntu 镜像可能未预装
+        run: |
+          if ! command -v unzip >/dev/null 2>&1; then
+            if [ "${{ runner.os }}" = "Linux" ]; then
+              sudo apt-get update -y && sudo apt-get install -y unzip
+            else
+              echo "::error::unzip missing on ${{ runner.os }}"; exit 1
+            fi
+          fi
+
+      - name: Build green pack
+        run: make ${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-green-${{ matrix.name }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    # 仅 tag 推送时创建 Release(dispatch 只产出 artifacts)
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dsh-green-*
+          merge-multiple: true
+          path: artifacts
+
+      - name: List artifacts
+        run: ls -lh artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
