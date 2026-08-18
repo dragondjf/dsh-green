@@ -88,13 +88,22 @@ jobs:
         run: |
           mkdir -p e2e/${{ matrix.name }}
           ASSET="${{ matrix.asset }}"
-          # 优先 tar (能识别 gzip/tar); 失败再回退 unzip
-          # 注意: win7 产物虽叫 .zip 但实为 gzip, 故不能依赖扩展名
-          if tar xzf "$ASSET" -C e2e/${{ matrix.name }} 2>/dev/null; then
-            echo "extracted via tar: $ASSET"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            # Windows: bsdtar (tar) 自动识别 zip/gz, 最稳; 失败回退 powershell
+            if tar xf "$ASSET" -C e2e/${{ matrix.name }} 2>/dev/null; then
+              echo "extracted via tar(bsdtar): $ASSET"
+            else
+              echo "tar failed, powershell Expand-Archive: $ASSET"
+              powershell -Command "Expand-Archive -Force '$ASSET' 'e2e/${{ matrix.name }}'"
+            fi
           else
-            echo "tar failed, falling back to unzip: $ASSET"
-            unzip -o "$ASSET" -d e2e/${{ matrix.name }}
+            # 非 Windows: gzip/tar 优先, 失败回退 unzip (真 zip)
+            if tar xzf "$ASSET" -C e2e/${{ matrix.name }} 2>/dev/null; then
+              echo "extracted via tar: $ASSET"
+            else
+              echo "tar failed, falling back to unzip: $ASSET"
+              unzip -o "$ASSET" -d e2e/${{ matrix.name }}
+            fi
           fi
           echo "=== extracted tree ==="
           ls -laR e2e/${{ matrix.name }} 2>/dev/null | head -60 || true
@@ -118,15 +127,16 @@ jobs:
           PACK_DIR="${{ steps.locate.outputs.pack_dir }}"
           if [ "${{ runner.os }}" = "Windows" ]; then
             # Windows: 用 cmd /c 启动 .bat (git-bash 下最稳)
-            CMD="cmd //c $(cygpath -w "$PACK_DIR/run.bat" 2>/dev/null || echo "$PACK_DIR/run.bat")"
+            WIN_BAT="$(cygpath -w "$PACK_DIR/run.bat" 2>/dev/null || echo "$PACK_DIR/run.bat")"
+            CMD=(cmd //c "$WIN_BAT")
           else
             # Linux/macOS: bash 启动 .sh
             chmod +x "$PACK_DIR/run.sh"
-            CMD="bash \"$PACK_DIR/run.sh\""
+            CMD=(bash "$PACK_DIR/run.sh")
           fi
-          echo "launching: $CMD"
-          # 后台启动, 日志落盘便于诊断
-          nohup $CMD > e2e/${{ matrix.name }}/dsh.log 2>&1 &
+          echo "launching: ${CMD[*]}"
+          # 后台启动, 日志落盘便于诊断 (数组展开, 避免引号被当作路径一部分)
+          nohup "${CMD[@]}" > e2e/${{ matrix.name }}/dsh.log 2>&1 &
           echo "pid=$!" >> "$GITHUB_OUTPUT"
           echo "launched pid=$!"
 
