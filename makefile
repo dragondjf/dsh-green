@@ -391,16 +391,18 @@ ifeq ($(PLATFORM),windows)
 	@echo "echo." >> "$(PACK_DIR)/run.bat"
 	@echo "\"%BASE_DIR%node.exe\" \"%BASE_DIR%node_modules\\@deepseek-ai\\dsh\\lib\\bin.js\" web" >> "$(PACK_DIR)/run.bat"
 else
-	@echo "#!/bin/bash" > "$(PACK_DIR)/run.sh"
-	@echo "BASE_DIR=\"\$(cd \"\$(dirname \"\$0\")\" && pwd)\"" >> "$(PACK_DIR)/run.sh"
-	@echo "export PATH=\"\$BASE_DIR:\$PATH\"" >> "$(PACK_DIR)/run.sh"
-	@echo "export NODE_PATH=\"\$BASE_DIR/node_modules\"" >> "$(PACK_DIR)/run.sh"
-	@echo "echo \"========================================\"" >> "$(PACK_DIR)/run.sh"
-	@echo "echo \"   DSH Green Pack\"" >> "$(PACK_DIR)/run.sh"
-	@echo "echo \"   Node: $(NODE_VERSION)\"" >> "$(PACK_DIR)/run.sh"
-	@echo "echo \"========================================\"" >> "$(PACK_DIR)/run.sh"
-	@echo "echo \"\"" >> "$(PACK_DIR)/run.sh"
-	@echo "\"\$BASE_DIR/node\" \"\$BASE_DIR/node_modules/@deepseek-ai/dsh/lib/bin.js\" web" >> "$(PACK_DIR)/run.sh"
+	@printf '%s\n' \
+	'#!/bin/bash' \
+	'BASE_DIR="$$(cd "$$(dirname "$$0")" && pwd)"' \
+	'export PATH="$$BASE_DIR:$$PATH"' \
+	'export NODE_PATH="$$BASE_DIR/node_modules"' \
+	'echo "========================================"' \
+	'echo "   DSH Green Pack"' \
+	'echo "   Node: $(NODE_VERSION)"' \
+	'echo "========================================"' \
+	'echo ""' \
+	'"$$BASE_DIR/node" "$$BASE_DIR/node_modules/@deepseek-ai/dsh/lib/bin.js" web' \
+	> "$(PACK_DIR)/run.sh"
 	@chmod +x "$(PACK_DIR)/run.sh"
 endif
 
