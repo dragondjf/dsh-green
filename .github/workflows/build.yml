@@ -87,21 +87,23 @@ jobs:
       - name: Extract green pack for E2E
         run: |
           mkdir -p e2e/${{ matrix.name }}
-          if [ "${{ matrix.target }}" = "win7" ] || [ "${{ runner.os }}" = "Windows" ]; then
-            # zip 解压 (GNU unzip 也能解)
-            unzip -o "${{ matrix.asset }}" -d e2e/${{ matrix.name }}
+          ASSET="${{ matrix.asset }}"
+          if [ "${ASSET##*.}" = "zip" ]; then
+            echo "unzip $ASSET"
+            unzip -o "$ASSET" -d e2e/${{ matrix.name }}
           else
-            tar xzf "${{ matrix.asset }}" -C e2e/${{ matrix.name }}
+            echo "tar xzf $ASSET"
+            tar xzf "$ASSET" -C e2e/${{ matrix.name }}
           fi
-          echo "=== extracted ==="
-          ls -R e2e/${{ matrix.name }} | head -40
+          echo "=== extracted tree ==="
+          ls -laR e2e/${{ matrix.name }} 2>/dev/null | head -60 || true
 
       - name: Locate run script in extracted pack
         id: locate
         shell: bash
         run: |
-          # 找到含 run.sh / run.bat 的目录
-          PACK_DIR=$(find e2e/${{ matrix.name }} -maxdepth 2 -name 'run.sh' -o -name 'run.bat' | head -1 | xargs dirname 2>/dev/null)
+          # 找到含 run.sh / run.bat 的目录 (放宽深度, 适配不同打包结构)
+          PACK_DIR=$(find e2e/${{ matrix.name }} -name 'run.sh' -o -name 'run.bat' | head -1 | xargs dirname 2>/dev/null)
           if [ -z "$PACK_DIR" ]; then
             echo "::error::run.sh/run.bat not found in extracted pack"; exit 1
           fi
