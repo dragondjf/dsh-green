@@ -202,7 +202,8 @@ install-dsh: prepare-node
 	@echo "Installing @deepseek-ai/dsh + $(AGFS_PKG) (pnpm)..."
 	@echo "  This may take a few minutes..."
 	@mkdir -p "$(PNPM_DEPS)"
-	@echo '{"name":"dsh-build","private":true}' > "$(PNPM_DEPS)/package.json"
+	@printf '{\n  "name": "dsh-build",\n  "private": true,\n  "pnpm": {\n    "onlyBuiltDependencies": ["@deepseek-ai/dsh-subprocess-local", "@google/genai", "koffi", "node-pty", "protobufjs"]\n  }\n}\n' > "$(PNPM_DEPS)/package.json"
+	@printf 'dangerously-allow-all-builds=true\n' > "$(PNPM_DEPS)/.npmrc"
 	@cd "$(PNPM_DEPS)" && \
 	if [ "$(PLATFORM)" = "windows" ]; then \
 		"$(TEMP_DIR)/node/node.exe" "$(subst \,/,$(COREPACK))" pnpm add @deepseek-ai/dsh $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy 2>&1; \
