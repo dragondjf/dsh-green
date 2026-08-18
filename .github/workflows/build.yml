@@ -125,6 +125,11 @@ jobs:
         shell: bash
         run: |
           PACK_DIR="${{ steps.locate.outputs.pack_dir }}"
+          # win7 用 node 22.22.3, @deepseek-ai/cordis-plugin-hmr 要求 --expose-internals
+          # 否则 HMR 初始化崩溃, server 起不来. 其他平台 node 22.19.0 不强制, 故仅 win7 设.
+          if [ "${{ matrix.target }}" = "win7" ]; then
+            export NODE_OPTIONS="--expose-internals"
+          fi
           if [ "${{ runner.os }}" = "Windows" ]; then
             # Windows: 用 cmd /c 启动 .bat (git-bash 下最稳)
             WIN_BAT="$(cygpath -w "$PACK_DIR/run.bat" 2>/dev/null || echo "$PACK_DIR/run.bat")"
