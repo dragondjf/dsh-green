@@ -88,12 +88,13 @@ jobs:
         run: |
           mkdir -p e2e/${{ matrix.name }}
           ASSET="${{ matrix.asset }}"
-          if [ "${ASSET##*.}" = "zip" ]; then
-            echo "unzip $ASSET"
-            unzip -o "$ASSET" -d e2e/${{ matrix.name }}
+          # 优先 tar (能识别 gzip/tar); 失败再回退 unzip
+          # 注意: win7 产物虽叫 .zip 但实为 gzip, 故不能依赖扩展名
+          if tar xzf "$ASSET" -C e2e/${{ matrix.name }} 2>/dev/null; then
+            echo "extracted via tar: $ASSET"
           else
-            echo "tar xzf $ASSET"
-            tar xzf "$ASSET" -C e2e/${{ matrix.name }}
+            echo "tar failed, falling back to unzip: $ASSET"
+            unzip -o "$ASSET" -d e2e/${{ matrix.name }}
           fi
           echo "=== extracted tree ==="
           ls -laR e2e/${{ matrix.name }} 2>/dev/null | head -60 || true
