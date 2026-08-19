@@ -4,8 +4,9 @@
 # 目的: 在 QEMU 虚拟机里运行 Debian 10 (Buster, 内核 4.19),
 #       验证 dsh-green 能在老内核环境下同样构建成功。
 # 架构: amd64 (x86 原生 runner) + arm64 (ARM 原生 runner)
-# 注: GitHub 公共 runner 无 /dev/kvm, 故用纯 TCG 模拟 (无 KVM 加速)。
-#     若用自托管带 KVM 的 runner, 可在矩阵 kvm_accel 里加 -enable-kvm。
+# 注: GitHub 公共 runner 无 /dev/kvm, 故 QEMU 与 libguestfs 均强制 TCG
+#     (LIBGUESTFS_FORCE_TCG=1), 否则 libguestfs appliance 起不来。
+# 镜像: Debian 10 openstack 镜像 (cdimage current-10, 含 4.19 内核)
 # 触发: push main / workflow_dispatch (独立验证, 不挂 Release 链路)
 # ============================================================
 
@@ -40,11 +41,8 @@ jobs:
             img_url: https://cdimage.debian.org/cdimage/openstack/current-10/debian-10-openstack-amd64.qcow2
             img_name: debian10-amd64.qcow2
             root_dev: /dev/sda1
-            console: ttyS0
             disk_if: virtio-blk-pci
             net_if: virtio-net-pci
-            kernel_glob: /boot/vmlinuz-4.19*
-            initrd_glob: /boot/initrd.img-4.19*
 
           # ---------- ARM64 (aarch64) ----------
           # 注意: GitHub 公共原生 ARM runner 标签是 ubuntu-24.04-arm64 (非 -arm)
@@ -57,11 +55,8 @@ jobs:
             img_url: https://cdimage.debian.org/cdimage/openstack/current-10/debian-10-openstack-arm64.qcow2
             img_name: debian10-arm64.qcow2
             root_dev: /dev/vda1
-            console: ttyAMA0
             disk_if: virtio-blk-device
             net_if: virtio-net-device
-            kernel_glob: /boot/vmlinuz-4.19*
-            initrd_glob: /boot/initrd.img-4.19*
 
     steps:
       - name: Checkout
@@ -77,26 +72,17 @@ jobs:
             wget \
             git
 
-      - name: Download Debian 10 cloud image
+      - name: Download Debian 10 image
         run: |
+          # -L 跟随 cdimage 的 302 重定向; openstack 镜像含 4.19 内核
           wget -q -L -O ${{ matrix.img_name }} ${{ matrix.img_url }}
           qemu-img resize ${{ matrix.img_name }} +4G
 
-      # 提取内核 4.19 + initrd, 验证老内核可用 (用 virt-copy-out 一次性提取, 比 guestmount 稳)
-      - name: Extract Kernel 4.19 and initrd
-        run: |
-          virt-copy-out -a ${{ matrix.img_name }} ${{ matrix.kernel_glob }} ${{ matrix.initrd_glob }} . || {
-            echo "::error::无法从镜像提取 4.19 内核/initrd"; exit 1
-          }
-          # 归一化文件名 (通配可能带版本后缀)
-          mv -f vmlinuz-4.19* vmlinuz 2>/dev/null || true
-          mv -f initrd.img-4.19* initrd.img 2>/dev/null || true
-          ls -la vmlinuz initrd.img
-          echo "extracted kernel: $(file vmlinuz | cut -d: -f2-)"
-
-      # 离线注入: 设 root 密码 + 首次启动自动 clone&构建 dsh-green
-      # (避免串口交互式 login 的脆弱; makefile 自带 node 22.19 下载, VM 内只需 make+git)
+      # 注入首次启动脚本: 装 make+git -> clone -> make archive -> 写结果 -> poweroff
+      # (makefile 自带 node 22.19 下载, VM 内只需 make+git; libguestfs 强制 TCG)
       - name: Inject build script (virt-customize firstboot)
+        env:
+          LIBGUESTFS_FORCE_TCG: "1"
         run: |
           cat > /tmp/firstboot.sh <<'EOF'
           #!/bin/bash
@@ -108,37 +94,39 @@ jobs:
           rm -rf dsh-green
           git clone --depth 1 https://github.com/dragondjf/dsh-green.git
           cd dsh-green
-          make archive 2>&1 | tee /root/build.log
-          if [ -f "dsh-green/run.sh" ] || [ -f "dsh-green/run.bat" ]; then
-            echo "BUILD_OK" >> /root/build.log
-          else
-            echo "BUILD_FAIL" >> /root/build.log
-          fi
-          echo "=== build finished ===" >> /root/build.log
+          {
+            echo "=== uname ==="
+            uname -a
+            echo "=== os-release ==="
+            head -3 /etc/os-release
+            echo "=== make archive ==="
+            make archive 2>&1
+            if [ -e dsh-green/run.sh ] || [ -e dsh-green/run.bat ]; then
+              echo "BUILD_OK"
+            else
+              echo "BUILD_FAIL"
+            fi
+          } | tee /root/build.log
+          sync
           poweroff
           EOF
           chmod +x /tmp/firstboot.sh
-          # 设 root 密码 (ci) 以便调试; firstboot 注入构建脚本
           virt-customize -a ${{ matrix.img_name }} \
             --root-password password:ci \
             --firstboot /tmp/firstboot.sh || {
             echo "::error::virt-customize 注入失败"; exit 1
           }
 
-      # 启动 QEMU, 用提取出的 4.19 内核直接引导 cloud 镜像, 串口看构建过程
+      # 直接用镜像自带 bootloader 引导 (Debian 10 内核即 4.19), 不提取内核
       - name: Boot Debian 10 and build dsh-green in QEMU
         timeout-minutes: 40
         run: |
-          echo "=== QEMU boot: Debian 10 kernel 4.19 on ${{ matrix.arch }} ==="
-          # -nographic 把串口输出到 stdout; VM 内 firstboot 跑完会 poweroff, QEMU 退出
+          echo "=== QEMU boot: Debian 10 on ${{ matrix.arch }} (TCG, no KVM) ==="
           ${{ matrix.qemu_bin }} \
             -M ${{ matrix.machine }} \
             -m 3072 \
             -smp 2 \
             -cpu ${{ matrix.cpu }} \
-            -kernel ./vmlinuz \
-            -initrd ./initrd.img \
-            -append "root=${{ matrix.root_dev }} console=${{ matrix.console }} rw" \
             -drive file=${{ matrix.img_name }},format=qcow2,if=none,id=drive0 \
             -device ${{ matrix.disk_if }},drive=drive0 \
             -netdev user,id=net0,hostfwd=tcp::10022-:22 \
@@ -147,18 +135,18 @@ jobs:
             -no-reboot || true
           echo "=== QEMU process exited (VM powered off or timeout) ==="
 
-      # 重新挂载镜像, 取回构建日志判定结果 (用 guestfish 只读取, 避免 guestmount appliance 重建)
+      # 读回构建日志判定结果 (libguestfs 强制 TCG)
       - name: Collect build result
+        env:
+          LIBGUESTFS_FORCE_TCG: "1"
         run: |
-          mkdir -p /tmp/vmroot
-          # 用 guestfish 直接 cat, 不挂载整个 FS
           BUILD_RESULT=$(guestfish --ro -a ${{ matrix.img_name }} -m ${{ matrix.root_dev }} \
-            "cat /root/build.log" 2>/dev/null | tail -5 || echo "NO_BUILD_LOG")
+            "cat /root/build.log" 2>/dev/null | tail -8 || echo "NO_BUILD_LOG")
           echo "$BUILD_RESULT"
-          echo "$BUILD_RESULT" | grep -q "BUILD_OK" && {
+          if echo "$BUILD_RESULT" | grep -q "BUILD_OK"; then
             echo "::notice::dsh-green built successfully on Debian 10 (4.19) ${{ matrix.arch }}"
             exit 0
-          }
+          fi
           echo "::error::dsh-green build did NOT complete OK on Debian 10 ${{ matrix.arch }}"
           echo "--- last build.log ---"
           echo "$BUILD_RESULT"
