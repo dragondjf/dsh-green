@@ -4,9 +4,9 @@
 # 目的: 在 QEMU 虚拟机里运行 Debian 10 (Buster, 内核 4.19),
 #       验证 dsh-green 能在老内核环境下同样构建成功。
 # 架构: amd64 (x86 原生 runner) + arm64 (ARM 原生 runner)
-# 注: GitHub 公共 runner 无 /dev/kvm, 故 QEMU 与 libguestfs 均强制 TCG
-#     (LIBGUESTFS_FORCE_TCG=1), 否则 libguestfs appliance 起不来。
-# 镜像: Debian 10 openstack 镜像 (cdimage current-10, 含 4.19 内核)
+# 实现: 纯 qemu-nbd + mount 离线注入首次启动服务 (不依赖脆弱的 libguestfs),
+#       QEMU 直接引导镜像自带 4.19 bootloader。公共 runner 无 KVM -> TCG。
+# 镜像: Debian 10 openstack (cdimage current-10, 含 4.19 内核)
 # 触发: push main / workflow_dispatch (独立验证, 不挂 Release 链路)
 # ============================================================
 
@@ -40,7 +40,6 @@ jobs:
             cpu: qemu64
             img_url: https://cdimage.debian.org/cdimage/openstack/current-10/debian-10-openstack-amd64.qcow2
             img_name: debian10-amd64.qcow2
-            root_dev: /dev/sda1
             disk_if: virtio-blk-pci
             net_if: virtio-net-pci
 
@@ -54,7 +53,6 @@ jobs:
             cpu: cortex-a57
             img_url: https://cdimage.debian.org/cdimage/openstack/current-10/debian-10-openstack-arm64.qcow2
             img_name: debian10-arm64.qcow2
-            root_dev: /dev/vda1
             disk_if: virtio-blk-device
             net_if: virtio-net-device
 
@@ -62,13 +60,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install QEMU + libguestfs
+      - name: Install QEMU
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             ${{ matrix.qemu_pkg }} \
             qemu-utils \
-            libguestfs-tools \
             wget \
             git
 
@@ -78,15 +75,18 @@ jobs:
           wget -q -L -O ${{ matrix.img_name }} ${{ matrix.img_url }}
           qemu-img resize ${{ matrix.img_name }} +4G
 
-      # 注入首次启动脚本: 装 make+git -> clone -> make archive -> 写结果 -> poweroff
-      # (makefile 自带 node 22.19 下载, VM 内只需 make+git; libguestfs 强制 TCG)
-      - name: Inject build script (virt-customize firstboot)
-        env:
-          LIBGUESTFS_FORCE_TCG: "1"
+      # 离线注入首次启动服务: 用 qemu-nbd 挂载镜像, 写入 systemd oneshot 服务
+      # (绕开 libguestfs: qemu-nbd 仅依赖 qemu-utils, 公共 runner 稳)
+      - name: Inject first-boot build service (qemu-nbd)
         run: |
           cat > /tmp/firstboot.sh <<'EOF'
           #!/bin/bash
           set -e
+          # Debian 10 EOL: 默认源已移走, 改指向 archive.debian.org
+          sed -i 's|deb.debian.org|archive.debian.org|g; s|security.debian.org|archive.debian.org/debian-security|g' /etc/apt/sources.list
+          [ -d /etc/apt/sources.list.d ] && for f in /etc/apt/sources.list.d/*.list; do
+            sed -i 's|deb.debian.org|archive.debian.org|g; s|security.debian.org|archive.debian.org/debian-security|g' "$f"
+          done
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y make git
@@ -95,31 +95,46 @@ jobs:
           git clone --depth 1 https://github.com/dragondjf/dsh-green.git
           cd dsh-green
           {
-            echo "=== uname ==="
-            uname -a
-            echo "=== os-release ==="
-            head -3 /etc/os-release
-            echo "=== make archive ==="
-            make archive 2>&1
-            if [ -e dsh-green/run.sh ] || [ -e dsh-green/run.bat ]; then
-              echo "BUILD_OK"
-            else
-              echo "BUILD_FAIL"
-            fi
+            echo "=== uname ==="; uname -a
+            echo "=== os-release ==="; head -3 /etc/os-release
+            echo "=== make archive ==="; make archive 2>&1
+            if [ -e dsh-green/run.sh ] || [ -e dsh-green/run.bat ]; then echo "BUILD_OK"; else echo "BUILD_FAIL"; fi
           } | tee /root/build.log
           sync
           poweroff
           EOF
           chmod +x /tmp/firstboot.sh
-          virt-customize -a ${{ matrix.img_name }} \
-            --root-password password:ci \
-            --firstboot /tmp/firstboot.sh || {
-            echo "::error::virt-customize 注入失败"; exit 1
-          }
+
+          sudo modprobe nbd || true
+          sudo qemu-nbd -c /dev/nbd0 ${{ matrix.img_name }}
+          # 等分区设备出现
+          for i in $(seq 1 20); do [ -b /dev/nbd0p1 ] && break; sleep 1; done
+          sudo mount /dev/nbd0p1 /mnt
+          # 写入一次性 systemd 服务 (开机跑 firstboot, 构建完 poweroff)
+          sudo tee /mnt/etc/systemd/system/dsh-build.service >/dev/null <<'SVCEOF'
+          [Unit]
+          Description=DSH build on first boot
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/root/firstboot.sh
+
+          [Install]
+          WantedBy=multi-user.target
+          SVCEOF
+          sudo cp /tmp/firstboot.sh /mnt/root/firstboot.sh
+          sudo chmod +x /mnt/root/firstboot.sh
+          sudo ln -sf /etc/systemd/system/dsh-build.service /mnt/etc/systemd/system/multi-user.target.wants/
+          sudo umount /mnt
+          sudo qemu-nbd -d /dev/nbd0
+          echo "injected first-boot service into image"
 
       # 直接用镜像自带 bootloader 引导 (Debian 10 内核即 4.19), 不提取内核
       - name: Boot Debian 10 and build dsh-green in QEMU
-        timeout-minutes: 40
+        timeout-minutes: 45
         run: |
           echo "=== QEMU boot: Debian 10 on ${{ matrix.arch }} (TCG, no KVM) ==="
           ${{ matrix.qemu_bin }} \
@@ -135,13 +150,16 @@ jobs:
             -no-reboot || true
           echo "=== QEMU process exited (VM powered off or timeout) ==="
 
-      # 读回构建日志判定结果 (libguestfs 强制 TCG)
+      # 重新挂载镜像, 读回构建日志判定结果 (qemu-nbd, 不依赖 libguestfs)
       - name: Collect build result
-        env:
-          LIBGUESTFS_FORCE_TCG: "1"
         run: |
-          BUILD_RESULT=$(guestfish --ro -a ${{ matrix.img_name }} -m ${{ matrix.root_dev }} \
-            "cat /root/build.log" 2>/dev/null | tail -8 || echo "NO_BUILD_LOG")
+          sudo modprobe nbd || true
+          sudo qemu-nbd -c /dev/nbd0 ${{ matrix.img_name }}
+          for i in $(seq 1 20); do [ -b /dev/nbd0p1 ] && break; sleep 1; done
+          sudo mount /dev/nbd0p1 /mnt
+          BUILD_RESULT=$(tail -8 /mnt/root/build.log 2>/dev/null || echo "NO_BUILD_LOG")
+          sudo umount /mnt
+          sudo qemu-nbd -d /dev/nbd0
           echo "$BUILD_RESULT"
           if echo "$BUILD_RESULT" | grep -q "BUILD_OK"; then
             echo "::notice::dsh-green built successfully on Debian 10 (4.19) ${{ matrix.arch }}"
