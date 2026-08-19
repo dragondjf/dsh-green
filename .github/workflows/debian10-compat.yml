@@ -37,7 +37,7 @@ jobs:
             qemu_bin: qemu-system-x86_64
             machine: pc
             cpu: qemu64
-            img_url: https://cloud.debian.org/images/cloud/buster/latest/debian-10-buster-amd64.qcow2
+            img_url: https://cdimage.debian.org/cdimage/openstack/current-10/debian-10-openstack-amd64.qcow2
             img_name: debian10-amd64.qcow2
             root_dev: /dev/sda1
             console: ttyS0
@@ -54,7 +54,7 @@ jobs:
             qemu_bin: qemu-system-aarch64
             machine: virt
             cpu: cortex-a57
-            img_url: https://cloud.debian.org/images/cloud/buster/latest/debian-10-buster-arm64.qcow2
+            img_url: https://cdimage.debian.org/cdimage/openstack/current-10/debian-10-openstack-arm64.qcow2
             img_name: debian10-arm64.qcow2
             root_dev: /dev/vda1
             console: ttyAMA0
@@ -79,7 +79,7 @@ jobs:
 
       - name: Download Debian 10 cloud image
         run: |
-          wget -q -O ${{ matrix.img_name }} ${{ matrix.img_url }}
+          wget -q -L -O ${{ matrix.img_name }} ${{ matrix.img_url }}
           qemu-img resize ${{ matrix.img_name }} +4G
 
       # 提取内核 4.19 + initrd, 验证老内核可用 (用 virt-copy-out 一次性提取, 比 guestmount 稳)
