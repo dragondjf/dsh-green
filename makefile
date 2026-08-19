@@ -17,6 +17,7 @@ PKG_MANAGER ?= pnpm
 AGFS_PKG := @open-agfs/dsh-agfs@0.1.9
 PNPM_DEPS := $(TEMP_DIR)/pnpm-deps
 PNPM_MODULES := $(PNPM_DEPS)/node_modules
+SHARP_WASM_DIR := $(TEMP_DIR)/sharp-wasm-install
 
 # ---------- Win7 支持 ----------
 # 通过 `make win7` 显式启用（在任意系统上交叉构建 Win7 安装包）
@@ -106,8 +107,15 @@ else
     COREPACK := $(TEMP_DIR)/node/lib/node_modules/corepack/dist/corepack.js
 endif
 
+# ---------- npm CLI (local node) ----------
+ifeq ($(PLATFORM),windows)
+    NPM_CLI := $(TEMP_DIR)/node/node_modules/npm/bin/npm-cli.js
+else
+    NPM_CLI := $(TEMP_DIR)/node/lib/node_modules/npm/bin/npm-cli.js
+endif
+
 # ---------- Targets ----------
-.PHONY: help all pack clean clean-all info run archive download-node prepare-node install-dsh patch-rg win7
+.PHONY: help all pack clean clean-all info run archive download-node prepare-node install-dsh install-sharp-wasm patch-rg win7
 
 help:
 	@echo "========================================================"
@@ -123,7 +131,7 @@ help:
 	@echo "  make info        - Show environment info"
 	@echo "  make run         - Run the green package"
 	@echo "  make archive     - Create tar.gz archive"
-	@echo "  make win7        - Build Win7 package (local node zip + ripgrep 13.0.0 + .zip archive)"
+	@echo "  make win7        - Build Win7 package (local node zip + ripgrep 13.0.0 + @img/sharp-wasm32 + .zip archive)"
 	@echo "  make patch-rg    - Replace rg.exe with 13.0.0 (requires pack done)"
 	@echo ""
 
@@ -226,8 +234,53 @@ install-dsh: prepare-node
 	@echo "@deepseek-ai/dsh + $(AGFS_PKG) installed (npm)"
 endif
 
+# ---------- Win7: sharp WASM 回退 ----------
+# Win7 无法加载 sharp 原生二进制（@img/sharp-win32-x64 依赖 WaitOnAddress 等 Win8+ API），
+# sharp 加载器（sharp/dist/sharp.cjs）在原生加载失败后会回退到 @img/sharp-wasm32，
+# 因此 win7 制品包必须包含 @img/sharp-wasm32（版本与 sharp 严格一致）。
+# pnpm 在存在完整依赖树时不会把 @img/sharp-wasm32 落到磁盘（平台过滤），
+# 因此改用 npm 安装到独立临时目录（npm 不过滤直接依赖），再复制进 pnpm modules 顶层，
+# pack 的全量复制会把 @img/sharp-wasm32 + @emnapi/runtime 自动带入制品包。
+# 仅 TARGET_PLATFORM=win7 且 PKG_MANAGER=pnpm 时生效。
+install-sharp-wasm: install-dsh
+	@echo "Setting up @img/sharp-wasm32 (Win7 sharp fallback)..."
+ifeq ($(PKG_MANAGER),pnpm)
+	@SHARP_VERSION=$$("$(TEMP_DIR)/node/node.exe" -e "console.log(require('$(subst \,/,$(PNPM_MODULES))/sharp/package.json').version)" 2>/dev/null); \
+	if [ -z "$$SHARP_VERSION" ]; then \
+		echo "  WARN: sharp not found in pnpm modules, skipping wasm fallback"; \
+	else \
+		echo "  sharp version detected: $$SHARP_VERSION"; \
+		rm -rf "$(subst \,/,$(SHARP_WASM_DIR))"; \
+		mkdir -p "$(subst \,/,$(SHARP_WASM_DIR))"; \
+		printf '{"name":"sharp-wasm-install","private":true}\n' > "$(subst \,/,$(SHARP_WASM_DIR))/package.json"; \
+		if [ "$(PLATFORM)" = "windows" ]; then \
+			cd "$(subst \,/,$(SHARP_WASM_DIR))" && "$(TEMP_DIR)/node/node.exe" "$(subst \,/,$(NPM_CLI))" install "@img/sharp-wasm32@$$SHARP_VERSION" --no-audit --no-fund --loglevel=error --no-package-lock 2>&1; \
+		else \
+			cd "$(subst \,/,$(SHARP_WASM_DIR))" && "$(TEMP_DIR)/node/bin/node" "$(subst \,/,$(NPM_CLI))" install "@img/sharp-wasm32@$$SHARP_VERSION" --no-audit --no-fund --loglevel=error --no-package-lock 2>&1; \
+		fi; \
+		if [ -d "$(subst \,/,$(SHARP_WASM_DIR))/node_modules/@img/sharp-wasm32" ]; then \
+			rm -rf "$(subst \,/,$(PNPM_MODULES))/@img/sharp-wasm32" "$(subst \,/,$(PNPM_MODULES))/@emnapi"; \
+			mkdir -p "$(subst \,/,$(PNPM_MODULES))/@img"; \
+			cp -r "$(subst \,/,$(SHARP_WASM_DIR))/node_modules/@img/sharp-wasm32" "$(subst \,/,$(PNPM_MODULES))/@img/"; \
+			cp -r "$(subst \,/,$(SHARP_WASM_DIR))/node_modules/@emnapi" "$(subst \,/,$(PNPM_MODULES))/"; \
+			rm -rf "$(subst \,/,$(SHARP_WASM_DIR))"; \
+			echo "  @img/sharp-wasm32@$$SHARP_VERSION + @emnapi/runtime copied into pnpm modules"; \
+		else \
+			echo "  ERROR: npm install of @img/sharp-wasm32 failed"; \
+			exit 1; \
+		fi; \
+	fi
+else
+	@echo "  SKIP (npm mode): manually add @img/sharp-wasm32@<sharp-version> into node_modules for Win7"
+endif
+	@echo "@img/sharp-wasm32 fallback ready"
+
 # ---------- Pack ----------
-pack: install-dsh
+PACK_DEPS := install-dsh
+ifeq ($(TARGET_PLATFORM),win7)
+PACK_DEPS += install-sharp-wasm
+endif
+pack: $(PACK_DEPS)
 	@echo "Packing DSH green package..."
 	@mkdir -p "$(PACK_DIR)"
 	@mkdir -p "$(NODE_MODULES)"
@@ -254,18 +307,34 @@ ifeq ($(PKG_MANAGER),pnpm)
 			const { execSync } = require('child_process'); \
 			const src = '$(subst \,/,$(PNPM_MODULES))'; \
 			const dst = '$(subst \,/,$(NODE_MODULES))'; \
-			if (!fs.existsSync(src)) { console.error('  ERROR: pnpm modules not found: ' + src); process.exit(1); } \
-			for (const name of fs.readdirSync(src)) { \
-				if (name === '.pnpm' || name === '.bin' || name === '.modules.yaml') continue; \
-				const srcPath = path.join(src, name); \
-				const dstPath = path.join(dst, name); \
-				if (!fs.existsSync(dstPath)) { \
-					console.log('  Copying:', name); \
-					try { \
-						execSync('xcopy /q /e /i /y \"' + srcPath + '\" \"' + dstPath + '\"', { stdio: 'pipe', maxBuffer: 256 * 1024 * 1024 }); \
-					} catch(e) { console.warn('  Failed:', name); } \
+			const skip = ['.pnpm', '.bin', '.modules.yaml', '.pnpm-workspace-state-v1.json']; \
+			const maxBuf = 256 * 1024 * 1024; \
+			function copyDir(s, d) { \
+				execSync('xcopy /q /e /i /y \"' + s + '\" \"' + d + '\"', { stdio: 'pipe', maxBuffer: maxBuf }); \
+			} \
+			function copyMissing(s, d) { \
+				for (const name of fs.readdirSync(s)) { \
+					if (skip.includes(name)) continue; \
+					const sp = path.join(s, name); \
+					const dp = path.join(d, name); \
+					const st = fs.statSync(sp); \
+					if (fs.existsSync(dp)) { \
+						const dt = fs.statSync(dp); \
+						if (st.isDirectory() && dt.isDirectory()) copyMissing(sp, dp); \
+						continue; \
+					} \
+					if (st.isDirectory()) { \
+						console.log('  Copying:', name); \
+						try { copyDir(sp, dp); } catch(e) { console.warn('  Failed:', name); } \
+					} else { \
+						fs.mkdirSync(path.dirname(dp), { recursive: true }); \
+						fs.copyFileSync(sp, dp); \
+					} \
 				} \
 			} \
+			if (!fs.existsSync(src)) { console.error('  ERROR: pnpm modules not found: ' + src); process.exit(1); } \
+			fs.mkdirSync(dst, { recursive: true }); \
+			copyMissing(src, dst); \
 			console.log('  Dependencies copied'); \
 		"; \
 	else \
@@ -275,18 +344,33 @@ ifeq ($(PKG_MANAGER),pnpm)
 			const { execSync } = require('child_process'); \
 			const src = '$(PNPM_MODULES)'; \
 			const dst = '$(NODE_MODULES)'; \
-			if (!fs.existsSync(src)) { console.error('  ERROR: pnpm modules not found: ' + src); process.exit(1); } \
-			for (const name of fs.readdirSync(src)) { \
-				if (name === '.pnpm' || name === '.bin' || name === '.modules.yaml') continue; \
-				const srcPath = path.join(src, name); \
-				const dstPath = path.join(dst, name); \
-				if (!fs.existsSync(dstPath)) { \
-					console.log('  Copying:', name); \
-					try { \
-						execSync('cp -r \"' + srcPath + '\" \"' + dstPath + '\"', { stdio: 'pipe' }); \
-					} catch(e) { console.warn('  Failed:', name); } \
+			const skip = ['.pnpm', '.bin', '.modules.yaml', '.pnpm-workspace-state-v1.json']; \
+			function copyDir(s, d) { \
+				execSync('cp -r \"' + s + '\" \"' + d + '\"', { stdio: 'pipe' }); \
+			} \
+			function copyMissing(s, d) { \
+				for (const name of fs.readdirSync(s)) { \
+					if (skip.includes(name)) continue; \
+					const sp = path.join(s, name); \
+					const dp = path.join(d, name); \
+					const st = fs.statSync(sp); \
+					if (fs.existsSync(dp)) { \
+						const dt = fs.statSync(dp); \
+						if (st.isDirectory() && dt.isDirectory()) copyMissing(sp, dp); \
+						continue; \
+					} \
+					if (st.isDirectory()) { \
+						console.log('  Copying:', name); \
+						try { copyDir(sp, dp); } catch(e) { console.warn('  Failed:', name); } \
+					} else { \
+						fs.mkdirSync(path.dirname(dp), { recursive: true }); \
+						fs.copyFileSync(sp, dp); \
+					} \
 				} \
 			} \
+			if (!fs.existsSync(src)) { console.error('  ERROR: pnpm modules not found: ' + src); process.exit(1); } \
+			fs.mkdirSync(dst, { recursive: true }); \
+			copyMissing(src, dst); \
 			console.log('  Dependencies copied'); \
 		"; \
 	fi
