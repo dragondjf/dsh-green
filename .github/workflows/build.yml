@@ -145,23 +145,30 @@ jobs:
         id: wait
         shell: bash
         run: |
-          # dsh (>=0.1.2-rc.1) 强制 token: 不带 token 的根路径返回 401, curl -f 必败。
-          # 优先从 dsh.log 提取完整带 token URL, 提取不到再退回裸端口
+          # dsh (>=0.1.2-rc.1) 强制 token: 裸根路径返回 401。
+          # 探测以"端口有 HTTP 响应"为准 (code != 000), token URL 留给 E2E。
+          # 注意 grep 无匹配会返回 1, 在 pipefail 下必须 || true 兜底
           BASE="http://127.0.0.1:3080"
-          URL=$(grep -oE "${BASE}/\?token=[A-Za-z0-9_-]+" e2e/${{ matrix.name }}/dsh.log 2>/dev/null | head -1)
-          URL="${URL:-$BASE}"
-          echo "probing: $URL"
+          LOG="e2e/${{ matrix.name }}/dsh.log"
+          extract_token_url() { grep -oE "${BASE}/\?token=[A-Za-z0-9_-]+" "$LOG" 2>/dev/null | head -1 || true; }
+          PROBE="$(extract_token_url)"
+          PROBE="${PROBE:-$BASE}"
+          echo "probing: $PROBE"
           for i in $(seq 1 60); do
-            if curl -fsS "$URL" -o /dev/null 2>/dev/null; then
-              echo "DSH web ready after ${i}x2s: $URL"
-              echo "url=$URL" >> "$GITHUB_OUTPUT"
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 "$PROBE" 2>/dev/null || true)
+            if [ -n "$CODE" ] && [ "$CODE" != "000" ]; then
+              echo "DSH web responding (HTTP $CODE) after ${i}x2s"
+              TOKEN_URL="$(extract_token_url)"
+              FINAL="${TOKEN_URL:-$PROBE}"
+              echo "e2e url: $FINAL"
+              echo "url=$FINAL" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             sleep 2
           done
           echo "::error::DSH web did not come up on $BASE within 120s"
           echo "=== dsh.log tail ==="
-          tail -40 e2e/${{ matrix.name }}/dsh.log 2>/dev/null
+          tail -40 "$LOG" 2>/dev/null || true
           exit 1
 
       - name: Install Playwright
