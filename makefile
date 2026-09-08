@@ -14,6 +14,9 @@ NODE_VERSION := v22.19.0
 # npm 全局安装很慢，默认改用 pnpm（node 自带 corepack，hoisted 扁平结构更快）。
 # 回退: make PKG_MANAGER=npm ... 使用原有 npm 全局安装流程
 PKG_MANAGER ?= pnpm
+# dsh 跟随 npm dist-tag latest(@deepseek-ai/dsh@latest);
+# 如需固定版本改为 @deepseek-ai/dsh@<version> 即可
+DSH_PKG := @deepseek-ai/dsh@latest
 AGFS_PKG := @open-agfs/dsh-agfs@0.1.9
 PNPM_DEPS := $(TEMP_DIR)/pnpm-deps
 PNPM_MODULES := $(PNPM_DEPS)/node_modules
@@ -115,7 +118,7 @@ else
 endif
 
 # ---------- Targets ----------
-.PHONY: help all pack clean clean-all info run archive download-node prepare-node install-dsh install-sharp-wasm patch-rg win7
+.PHONY: help all pack clean clean-all info run archive download-node prepare-node install-dsh install-sharp-wasm patch-rg prepare-win7-profile win7
 
 help:
 	@echo "========================================================"
@@ -214,9 +217,9 @@ install-dsh: prepare-node
 	@printf 'dangerously-allow-all-builds=true\nonly-built-dependencies[]=@deepseek-ai/dsh-subprocess-local\nonly-built-dependencies[]=@google/genai\nonly-built-dependencies[]=koffi\nonly-built-dependencies[]=node-pty\nonly-built-dependencies[]=protobufjs\n' > "$(PNPM_DEPS)/.npmrc"
 	@cd "$(PNPM_DEPS)" && \
 	if [ "$(PLATFORM)" = "windows" ]; then \
-		"$(TEMP_DIR)/node/node.exe" "$(subst \,/,$(COREPACK))" pnpm add @deepseek-ai/dsh $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
+		"$(TEMP_DIR)/node/node.exe" "$(subst \,/,$(COREPACK))" pnpm add $(DSH_PKG) $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
 	else \
-		"$(TEMP_DIR)/node/bin/node" "$(subst \,/,$(COREPACK))" pnpm add @deepseek-ai/dsh $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
+		"$(TEMP_DIR)/node/bin/node" "$(subst \,/,$(COREPACK))" pnpm add $(DSH_PKG) $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
 	fi
 	@echo "@deepseek-ai/dsh + $(AGFS_PKG) installed (pnpm)"
 else
@@ -225,10 +228,10 @@ install-dsh: prepare-node
 	@echo "  This may take a few minutes..."
 	@cd "$(TEMP_DIR)/node" && \
 	if [ "$(PLATFORM)" = "windows" ]; then \
-		./node.exe ./node_modules/npm/bin/npm-cli.js install -g @deepseek-ai/dsh 2>&1; \
+		./node.exe ./node_modules/npm/bin/npm-cli.js install -g $(DSH_PKG) 2>&1; \
 		./node.exe ./node_modules/npm/bin/npm-cli.js install -g $(AGFS_PKG) --legacy-peer-deps 2>&1; \
 	else \
-		./bin/node ./bin/npm install -g @deepseek-ai/dsh 2>&1; \
+		./bin/node ./bin/npm install -g $(DSH_PKG) 2>&1; \
 		./bin/node ./bin/npm install -g $(AGFS_PKG) --legacy-peer-deps 2>&1; \
 	fi
 	@echo "@deepseek-ai/dsh + $(AGFS_PKG) installed (npm)"
@@ -474,6 +477,7 @@ ifeq ($(PLATFORM),windows)
 	@echo "echo ========================================" >> "$(PACK_DIR)/run.bat"
 	@echo "echo." >> "$(PACK_DIR)/run.bat"
 ifeq ($(TARGET_PLATFORM),win7)
+	@echo "set DSH_HOME=%BASE_DIR%.dsh" >> "$(PACK_DIR)/run.bat"
 	@echo "\"%BASE_DIR%node.exe\" --expose-internals \"%BASE_DIR%node_modules\@deepseek-ai\dsh\lib\bin.js\" web" >> "$(PACK_DIR)/run.bat"
 else
 	@echo "\"%BASE_DIR%node.exe\" \"%BASE_DIR%node_modules\@deepseek-ai\dsh\lib\bin.js\" web" >> "$(PACK_DIR)/run.bat"
@@ -507,6 +511,50 @@ ifeq ($(PLATFORM),windows)
 else
 	@echo "  cd $(PACK_NAME) && ./run.sh"
 endif
+
+# ---------- Win7: 预置 in-box web profile（dsh-agfs 生效） ----------
+# dsh 的插件加载完全由 $DSH_HOME/profiles/web 的配置驱动，与包内 node_modules 是否有文件无关。
+# run.bat 已设置 DSH_HOME=包内 .dsh，因此这里预置：
+#   - profiles/web/package.json      声明 dsh.profile.bundles（含 @open-agfs/dsh-agfs）
+#   - profiles/web/cordis.patch.yml  模板 win7/cordis.patch.yml 直接拷贝（fileRoot 配置）
+#   - profiles/web/node_modules/@open-agfs/dsh-agfs
+#     Loader 激活插件时从 profile 目录向上解析 bare specifier；直接复制而非 symlink，
+#     避免 zip 打包丢失链接。其 peer 依赖会沿 .dsh/profiles/... -> 包根 node_modules 解析到。
+# 注意：cordis.patch.yml 用模板文件 + cp，而非 echo 逐行生成——native MinGW make 经
+# Windows 命令行（GBK 代码页）把含中文的配方传给 bash -c 时会破坏引号匹配（unexpected EOF）。
+prepare-win7-profile:
+	@echo "Preparing in-box web profile (dsh-agfs)..."
+	@mkdir -p "$(PACK_DIR)/.dsh/profiles/web/node_modules/@open-agfs"
+	@if [ -d "$(NODE_MODULES)/@open-agfs/dsh-agfs" ]; then \
+		AGFS_SRC="$(NODE_MODULES)/@open-agfs/dsh-agfs"; \
+	elif [ -d "$(NODE_MODULES)/@deepseek-ai/dsh/node_modules/@open-agfs/dsh-agfs" ]; then \
+		AGFS_SRC="$(NODE_MODULES)/@deepseek-ai/dsh/node_modules/@open-agfs/dsh-agfs"; \
+	else \
+		echo "  ERROR: @open-agfs/dsh-agfs not found in pack node_modules; run 'make pack' first."; exit 1; \
+	fi; \
+	rm -rf "$(PACK_DIR)/.dsh/profiles/web/node_modules/@open-agfs/dsh-agfs" 2>/dev/null || true; \
+	cp -r "$$AGFS_SRC" "$(PACK_DIR)/.dsh/profiles/web/node_modules/@open-agfs/dsh-agfs"
+	@echo '{' > "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '  "name": "dsh-profile-web",' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '  "private": true,' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '  "dependencies": {' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '    "@open-agfs/dsh-agfs": "^0.1.9"' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '  },' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '  "dsh": {' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '    "profile": {' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '      "bundles": [' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '        "@deepseek-ai/dsh-base",' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '        "@deepseek-ai/dsh-web-app",' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '        "@open-agfs/dsh-agfs"' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '      ]' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '    }' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '  }' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@echo '}' >> "$(PACK_DIR)/.dsh/profiles/web/package.json"
+	@if [ ! -f "$(WIN7_DIR)/cordis.patch.yml" ]; then \
+		echo "  ERROR: $(WIN7_DIR)/cordis.patch.yml not found"; exit 1; \
+	fi
+	@cp "$(WIN7_DIR)/cordis.patch.yml" "$(PACK_DIR)/.dsh/profiles/web/cordis.patch.yml"
+	@echo "In-box web profile prepared: $(PACK_DIR)/.dsh/profiles/web"
 
 # ---------- Win7: 替换 ripgrep 13.0.0 ----------
 # 参考 win7/rg-13.0.0-帮助手册.html §6：rg 14 在 Win7 上启动即崩溃（无法找到过程入口点），
@@ -567,8 +615,28 @@ endif
 archive: all
 	@echo "Creating archive..."
 ifeq ($(TARGET_PLATFORM),win7)
-	@cd "$(CURDIR)" && tar -a -cf "$(PACK_NAME)-win7-$(NODE_VERSION).zip" "$(PACK_NAME)" 2>/dev/null || \
-		powershell -NoProfile -Command "Compress-Archive -Force -Path '$(subst \,/,$(PACK_DIR))' -DestinationPath '$(subst \,/,$(CURDIR))/$(PACK_NAME)-win7-$(NODE_VERSION).zip'" 2>/dev/null || echo "  Archive creation failed (tar/powershell not available?)"
+	@echo "Creating zip archive..."
+	@rm -f "$(PACK_NAME)-win7-$(NODE_VERSION).zip"; \
+	if [ "$(PLATFORM)" = "windows" ]; then \
+		if [ -f "/c/Windows/System32/tar.exe" ]; then \
+			echo "  Using Windows bsdtar (real zip)"; \
+			cd "$(CURDIR)" && /c/Windows/System32/tar.exe -a -cf "$(PACK_NAME)-win7-$(NODE_VERSION).zip" "$(PACK_NAME)" 2>/dev/null; \
+		else \
+			echo "  Using PowerShell Compress-Archive"; \
+			cd "$(CURDIR)" && powershell -NoProfile -Command "Compress-Archive -Force -CompressionLevel Optimal -Path '$(subst \,/,$(PACK_DIR))' -DestinationPath '$(subst \,/,$(CURDIR))/$(PACK_NAME)-win7-$(NODE_VERSION).zip'"; \
+		fi; \
+	else \
+		echo "  Using zip"; \
+		cd "$(CURDIR)" && zip -r -q "$(PACK_NAME)-win7-$(NODE_VERSION).zip" "$(PACK_NAME)" 2>/dev/null || \
+			python3 -c "import shutil; shutil.make_archive('$(PACK_NAME)-win7-$(NODE_VERSION)', 'zip', root_dir='.', base_dir='$(PACK_NAME)')" 2>/dev/null || \
+			echo "  ERROR: no zip tool available (install zip or python3)"; \
+	fi
+	@if [ -f "$(PACK_NAME)-win7-$(NODE_VERSION).zip" ]; then \
+		magic=$$(head -c 2 "$(PACK_NAME)-win7-$(NODE_VERSION).zip" | od -An -tx1 | tr -d ' \n'); \
+		if [ "$$magic" = "504b" ]; then echo "  Verify: real ZIP (PK magic OK)"; else echo "  WARN: archive is NOT a valid zip (magic: $$magic)"; fi; \
+	else \
+		echo "  ERROR: archive file not created"; \
+	fi
 	@echo "Archive created: $(PACK_NAME)-win7-$(NODE_VERSION).zip"
 else
 	@cd "$(CURDIR)" && tar -czf "$(PACK_NAME)-$(PLATFORM)-$(NODE_VERSION).tar.gz" "$(PACK_NAME)" 2>/dev/null || echo "  Archive creation failed (tar not available?)"
@@ -579,6 +647,7 @@ endif
 all: pack
 ifeq ($(TARGET_PLATFORM),win7)
 	$(MAKE) patch-rg
+	$(MAKE) prepare-win7-profile
 endif
 	@echo "Full build completed!"
 

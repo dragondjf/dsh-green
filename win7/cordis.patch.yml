@@ -1,0 +1,7 @@
+# User patch layer for the web profile.
+# fileRoot 留空时 dsh-agfs 默认使用进程 cwd（run.bat 已 cd 到包根）。
+# 如需浏览其他目录，改为绝对路径（如 C:/workspace）。
+- id: dsh-agfs
+  config:
+    fileRoot: ''
+    debug: false

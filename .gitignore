@@ -43,3 +43,5 @@ worktrees/
 dsh-green-*.zip
 dsh-green
 .temp-build
+# 本地 bsdtar 工具包 (CI runner 自带 bsdtar, 无需入库)
+bsdt*.zip
