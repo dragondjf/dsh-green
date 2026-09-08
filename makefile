@@ -216,16 +216,18 @@ install-dsh: prepare-node
 	@printf '{\n  "name": "dsh-build",\n  "private": true\n}\n' > "$(PNPM_DEPS)/package.json"
 	@printf 'dangerously-allow-all-builds=true\nonly-built-dependencies[]=@deepseek-ai/dsh-subprocess-local\nonly-built-dependencies[]=@google/genai\nonly-built-dependencies[]=koffi\nonly-built-dependencies[]=node-pty\nonly-built-dependencies[]=protobufjs\n' > "$(PNPM_DEPS)/.npmrc"
 	@echo "  Installing pnpm@10 via bundled npm (bypass corepack: bundled corepack is incompatible with pnpm >= 12 layout, bin/pnpm.cjs not found)..."
-	@if [ "$(PLATFORM)" = "windows" ]; then \
-		cd "$(TEMP_DIR)/node" && ./node.exe "$(subst \,/,$(NPM_CLI))" install -g pnpm@10 --no-audit --no-fund --loglevel=error 2>&1; \
+	@mkdir -p "$(TEMP_DIR)/pnpm-cli" && \
+	printf '{"name":"pnpm-cli","private":true}\n' > "$(TEMP_DIR)/pnpm-cli/package.json" && \
+	if [ "$(PLATFORM)" = "windows" ]; then \
+		cd "$(TEMP_DIR)/pnpm-cli" && "$(TEMP_DIR)/node/node.exe" "$(subst \,/,$(NPM_CLI))" install pnpm@10 --no-audit --no-fund --loglevel=error --no-package-lock 2>&1; \
 	else \
-		cd "$(TEMP_DIR)/node/bin" && ./node "$(subst \,/,$(NPM_CLI))" install -g pnpm@10 --no-audit --no-fund --loglevel=error 2>&1; \
+		cd "$(TEMP_DIR)/pnpm-cli" && "$(TEMP_DIR)/node/bin/node" "$(subst \,/,$(NPM_CLI))" install pnpm@10 --no-audit --no-fund --loglevel=error --no-package-lock 2>&1; \
 	fi
 	@cd "$(PNPM_DEPS)" && \
 	if [ "$(PLATFORM)" = "windows" ]; then \
-		"$(TEMP_DIR)/node/pnpm.cmd" add $(DSH_PKG) $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
+		"$(TEMP_DIR)/node/node.exe" "$(subst \,/,$(TEMP_DIR))/pnpm-cli/node_modules/pnpm/bin/pnpm.cjs" add $(DSH_PKG) $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
 	else \
-		"$(TEMP_DIR)/node/bin/pnpm" add $(DSH_PKG) $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
+		"$(TEMP_DIR)/node/bin/node" "$(TEMP_DIR)/pnpm-cli/node_modules/pnpm/bin/pnpm.cjs" add $(DSH_PKG) $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
 	fi
 	@echo "@deepseek-ai/dsh + $(AGFS_PKG) installed (pnpm)"
 else
