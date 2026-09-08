@@ -215,11 +215,17 @@ install-dsh: prepare-node
 	@mkdir -p "$(PNPM_DEPS)"
 	@printf '{\n  "name": "dsh-build",\n  "private": true\n}\n' > "$(PNPM_DEPS)/package.json"
 	@printf 'dangerously-allow-all-builds=true\nonly-built-dependencies[]=@deepseek-ai/dsh-subprocess-local\nonly-built-dependencies[]=@google/genai\nonly-built-dependencies[]=koffi\nonly-built-dependencies[]=node-pty\nonly-built-dependencies[]=protobufjs\n' > "$(PNPM_DEPS)/.npmrc"
+	@echo "  Installing pnpm@10 via bundled npm (bypass corepack: bundled corepack is incompatible with pnpm >= 12 layout, bin/pnpm.cjs not found)..."
+	@if [ "$(PLATFORM)" = "windows" ]; then \
+		cd "$(TEMP_DIR)/node" && ./node.exe "$(subst \,/,$(NPM_CLI))" install -g pnpm@10 --no-audit --no-fund --loglevel=error 2>&1; \
+	else \
+		cd "$(TEMP_DIR)/node/bin" && ./node "$(subst \,/,$(NPM_CLI))" install -g pnpm@10 --no-audit --no-fund --loglevel=error 2>&1; \
+	fi
 	@cd "$(PNPM_DEPS)" && \
 	if [ "$(PLATFORM)" = "windows" ]; then \
-		"$(TEMP_DIR)/node/node.exe" "$(subst \,/,$(COREPACK))" pnpm add $(DSH_PKG) $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
+		"$(TEMP_DIR)/node/pnpm.cmd" add $(DSH_PKG) $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
 	else \
-		"$(TEMP_DIR)/node/bin/node" "$(subst \,/,$(COREPACK))" pnpm add $(DSH_PKG) $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
+		"$(TEMP_DIR)/node/bin/pnpm" add $(DSH_PKG) $(AGFS_PKG) --config.node-linker=hoisted --config.package-import-method=copy --config.dangerously-allow-all-builds=true 2>&1; \
 	fi
 	@echo "@deepseek-ai/dsh + $(AGFS_PKG) installed (pnpm)"
 else
@@ -478,9 +484,9 @@ ifeq ($(PLATFORM),windows)
 	@echo "echo." >> "$(PACK_DIR)/run.bat"
 ifeq ($(TARGET_PLATFORM),win7)
 	@echo "set DSH_HOME=%BASE_DIR%.dsh" >> "$(PACK_DIR)/run.bat"
-	@echo "\"%BASE_DIR%node.exe\" --expose-internals \"%BASE_DIR%node_modules\@deepseek-ai\dsh\lib\bin.js\" web" >> "$(PACK_DIR)/run.bat"
+	@echo "\"%BASE_DIR%node.exe\" --expose-internals \"%BASE_DIR%node_modules\@deepseek-ai\dsh\lib\bin.js\" web --no-open" >> "$(PACK_DIR)/run.bat"
 else
-	@echo "\"%BASE_DIR%node.exe\" \"%BASE_DIR%node_modules\@deepseek-ai\dsh\lib\bin.js\" web" >> "$(PACK_DIR)/run.bat"
+	@echo "\"%BASE_DIR%node.exe\" \"%BASE_DIR%node_modules\@deepseek-ai\dsh\lib\bin.js\" web --no-open" >> "$(PACK_DIR)/run.bat"
 endif
 else
 	@printf '%s\n' \
@@ -493,7 +499,7 @@ else
 	'echo "   Node: $(NODE_VERSION)"' \
 	'echo "========================================"' \
 	'echo ""' \
-	'"$$BASE_DIR/node" "$$BASE_DIR/node_modules/@deepseek-ai/dsh/lib/bin.js" web' \
+	'"$$BASE_DIR/node" "$$BASE_DIR/node_modules/@deepseek-ai/dsh/lib/bin.js" web --no-open' \
 	> "$(PACK_DIR)/run.sh"
 	@chmod +x "$(PACK_DIR)/run.sh"
 endif
