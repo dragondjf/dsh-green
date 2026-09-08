@@ -142,16 +142,24 @@ jobs:
           echo "launched pid=$!"
 
       - name: Wait for DSH web (127.0.0.1:3080)
+        id: wait
         shell: bash
         run: |
-          URL="http://127.0.0.1:3080"
+          # dsh (>=0.1.2-rc.1) 强制 token: 不带 token 的根路径返回 401, curl -f 必败。
+          # 优先从 dsh.log 提取完整带 token URL, 提取不到再退回裸端口
+          BASE="http://127.0.0.1:3080"
+          URL=$(grep -oE "${BASE}/\?token=[A-Za-z0-9_-]+" e2e/${{ matrix.name }}/dsh.log 2>/dev/null | head -1)
+          URL="${URL:-$BASE}"
+          echo "probing: $URL"
           for i in $(seq 1 60); do
             if curl -fsS "$URL" -o /dev/null 2>/dev/null; then
-              echo "DSH web ready after ${i}x2s"; exit 0
+              echo "DSH web ready after ${i}x2s: $URL"
+              echo "url=$URL" >> "$GITHUB_OUTPUT"
+              exit 0
             fi
             sleep 2
           done
-          echo "::error::DSH web did not come up on $URL within 120s"
+          echo "::error::DSH web did not come up on $BASE within 120s"
           echo "=== dsh.log tail ==="
           tail -40 e2e/${{ matrix.name }}/dsh.log 2>/dev/null
           exit 1
@@ -171,7 +179,7 @@ jobs:
         run: |
           mkdir -p e2e/${{ matrix.name }}/screenshots
           cd tests
-          DSH_URL="http://127.0.0.1:3080" \
+          DSH_URL="${{ steps.wait.outputs.url }}" \
           SHOT="../e2e/${{ matrix.name }}/screenshots/${{ matrix.name }}.png" \
           PLAYWRIGHT_BROWSERS_PATH="${{ github.workspace }}/pw-browsers" \
             node e2e.mjs
