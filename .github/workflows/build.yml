@@ -145,27 +145,37 @@ jobs:
         id: wait
         shell: bash
         run: |
-          # dsh (>=0.1.2-rc.1) 强制 token: 裸根路径返回 401。
-          # 探测以"端口有 HTTP 响应"为准 (code != 000), token URL 留给 E2E。
-          # 注意 grep 无匹配会返回 1, 在 pipefail 下必须 || true 兜底
+          # dsh (>=0.1.2-rc.1) 强制 token: E2E 必须用带 token 的 URL。
+          # token URL 打印到 dsh.log 可能有 stdout 块缓冲延迟, 服务已监听但日志未刷出,
+          # 因此就绪判定 = "token URL 出现且可访问"; 仅当服务有响应但 token 迟迟不出现时
+          # 降级输出裸 URL (兼容无 token 的旧版 dsh)。
+          # grep 无匹配返回 1, pipefail 下必须 || true 兜底。
           BASE="http://127.0.0.1:3080"
           LOG="e2e/${{ matrix.name }}/dsh.log"
           extract_token_url() { grep -oE "${BASE}/\?token=[A-Za-z0-9_-]+" "$LOG" 2>/dev/null | head -1 || true; }
-          PROBE="$(extract_token_url)"
-          PROBE="${PROBE:-$BASE}"
-          echo "probing: $PROBE"
+          RESPONDED=""
           for i in $(seq 1 60); do
-            CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 "$PROBE" 2>/dev/null || true)
+            TOKEN_URL="$(extract_token_url)"
+            if [ -n "$TOKEN_URL" ]; then
+              CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 "$TOKEN_URL" 2>/dev/null || true)
+              if [ -n "$CODE" ] && [ "$CODE" != "000" ]; then
+                echo "DSH web ready (HTTP $CODE) with token URL after ${i}x2s"
+                echo "e2e url: $TOKEN_URL"
+                echo "url=$TOKEN_URL" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 "$BASE" 2>/dev/null || true)
             if [ -n "$CODE" ] && [ "$CODE" != "000" ]; then
-              echo "DSH web responding (HTTP $CODE) after ${i}x2s"
-              TOKEN_URL="$(extract_token_url)"
-              FINAL="${TOKEN_URL:-$PROBE}"
-              echo "e2e url: $FINAL"
-              echo "url=$FINAL" >> "$GITHUB_OUTPUT"
-              exit 0
+              RESPONDED="HTTP $CODE"
             fi
             sleep 2
           done
+          if [ -n "$RESPONDED" ]; then
+            echo "::warning::web responds ($RESPONDED) but no token URL in dsh.log after 120s; using base URL"
+            echo "url=$BASE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           echo "::error::DSH web did not come up on $BASE within 120s"
           echo "=== dsh.log tail ==="
           tail -40 "$LOG" 2>/dev/null || true

@@ -28,7 +28,8 @@ try {
   await page.waitForTimeout(3000);
 
   const title = await page.title();
-  const bodyLen = (await page.locator('body').innerText()).length;
+  const bodyText = await page.locator('body').innerText();
+  const bodyLen = bodyText.length;
   console.log('[e2e] PAGE TITLE =', JSON.stringify(title));
   console.log('[e2e] BODY TEXT LENGTH =', bodyLen);
 
@@ -44,6 +45,12 @@ try {
 
   if (consoleErrors.length) {
     console.log('[e2e] CONSOLE ERRORS:', consoleErrors.slice(0, 10));
+  }
+
+  // dsh (>=0.1.2-rc.1) 强制 token: 裸 URL 会渲染认证提示页, 必须视为失败
+  if (/authentication required/i.test(bodyText)) {
+    console.error('[e2e] FAIL: dsh web shows authentication page (token missing or invalid)');
+    process.exit(1);
   }
 
   if (bodyLen < 5) {
