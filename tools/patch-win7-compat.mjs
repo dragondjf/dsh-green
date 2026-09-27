@@ -147,15 +147,19 @@ function existsTarget(dir) {
 }
 
 // ---- main ----
-const root = process.argv[2];
-if (!root) {
-	console.error("usage: node patch-win7-compat.mjs <search-root-dir>");
+// 支持多个搜索根: CI 上 pack 前依赖只存在于 .temp-build/pnpm-deps/node_modules,
+// 包根 node_modules 由 pack 的 copyMissing 复制生成, 因此两处都要搜 (补丁随复制保留)。
+const roots = process.argv.slice(2);
+if (roots.length === 0) {
+	console.error("usage: node patch-win7-compat.mjs <search-root-dir> [more-root-dirs...]");
 	process.exit(1);
 }
 const found = [];
-findBootDirs(root, 0, found);
+for (const root of roots) {
+	findBootDirs(root, 0, found);
+}
 if (found.length === 0) {
-	console.error(`ERROR: no ${BOOT_DIR_NAME} with lib/index.js found under ${root}`);
+	console.error(`ERROR: no ${BOOT_DIR_NAME} with lib/index.js found under: ${roots.join(", ")}`);
 	process.exit(1);
 }
 let failed = 0;

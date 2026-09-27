@@ -361,7 +361,7 @@ endif
 # 与 dsh 本体同版本不会被重装, 补丁得以保留)。
 patch-win7-compat: install-dsh
 	@echo "Patching dsh-app-boot for Win7 compatibility..."
-	@"$(subst \,/,$(WORKDSH_NODE_EXE))" tools/patch-win7-compat.mjs "$(subst \,/,$(NODE_MODULES))"
+	@"$(subst \,/,$(WORKDSH_NODE_EXE))" tools/patch-win7-compat.mjs "$(subst \,/,$(NODE_MODULES))" "$(subst \,/,$(PNPM_DEPS))/node_modules"
 	@echo "dsh-app-boot win7-compat patch done"
 
 # ---------- dsh 依赖版本对齐 ----------
