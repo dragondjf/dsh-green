@@ -101,6 +101,13 @@ ifeq ($(TARGET_PLATFORM),win7)
     NODE_PLATFORM := win-x64
     # 指定本地 node 压缩包，download-node 将直接解压
     NODE_LOCAL_ZIP := $(WIN7_NODE_ZIP)
+    # dsh 锁定 0.1.5-rc.3：0.1.7-rc.2 依赖 node-addon-require-builtin@0.1.6，
+    # 其 V8 GetCurrentContext ABI 探测在 win7 兼容版 node v22.22.3 上失败
+    # （Unsupported/no-context，boot 硬依赖无回退 -> 进程崩溃，web 起不来）。
+    # 0.1.5-rc.3 为正式线最新，boot 无该原生探测，win7 实测架构兼容（0.1.2-rc.1 同构）。
+    ifeq ($(TARGET_PROFILE),)
+        DSH_PKG := @deepseek-ai/dsh@0.1.5-rc.3
+    endif
 endif
 
 # ---------- Corepack (pnpm) ----------
