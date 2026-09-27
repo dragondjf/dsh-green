@@ -4,6 +4,8 @@
 # 触发:
 #   - push tag v*          -> 构建全部平台 + 自动创建 GitHub Release
 #   - workflow_dispatch     -> 仅构建产物(不上 Release), 用于调试/重跑
+#     inputs.targets: 逗号分隔的平台名过滤, 如 "win7-x64"; 留空 = 全部
+#     (平台名与 matrix.name 一致: linux-x64/darwin-arm64/windows-x64/win7-x64)
 # 说明:
 #   makefile 自带 Node 下载(corepack/pnpm)与平台检测,
 #   本工作流只需提供 runner + make + 网络(npm registry)。
@@ -18,6 +20,12 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Platforms to build (comma-separated matrix.name, empty = all)'
+        required: false
+        default: ''
+        type: string
 
 # 同一 ref 并发去重; tag 唯一故互不取消, dispatch 重跑会取消旧 run
 concurrency:
@@ -30,6 +38,8 @@ permissions:
 jobs:
   build:
     name: Build ${{ matrix.name }}
+    # push(tag) 或 dispatch 未传 targets -> 全平台; dispatch 传 targets -> 只跑列出的平台
+    if: ${{ github.event_name == 'push' || inputs.targets == '' || contains(split(inputs.targets, ','), matrix.name) }}
     runs-on: ${{ matrix.os }}
     # 全部用 bash(git bash on Windows)保证 make/unzip/tar 可用
     defaults:
