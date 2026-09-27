@@ -25,7 +25,6 @@ on:
         description: 'Platforms to build (comma-separated matrix.name, empty = all)'
         required: false
         default: ''
-        type: string
 
 # 同一 ref 并发去重; tag 唯一故互不取消, dispatch 重跑会取消旧 run
 concurrency:
