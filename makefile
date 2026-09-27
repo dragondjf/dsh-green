@@ -14,9 +14,9 @@ NODE_VERSION := v22.19.0
 # npm 全局安装很慢，默认改用 pnpm（node 自带 corepack，hoisted 扁平结构更快）。
 # 回退: make PKG_MANAGER=npm ... 使用原有 npm 全局安装流程
 PKG_MANAGER ?= pnpm
-# dsh 跟随 npm dist-tag latest(@deepseek-ai/dsh@latest);
-# 如需固定版本改为 @deepseek-ai/dsh@<version> 即可
-DSH_PKG := @deepseek-ai/dsh@latest
+# dsh 锁定 0.1.7-rc.2(npm dist-tag next, 发布候选线, 2026-09 当前最新 rc);
+# 如需跟随正式线改回 @deepseek-ai/dsh@latest
+DSH_PKG := @deepseek-ai/dsh@0.1.7-rc.2
 AGFS_PKG := @open-agfs/dsh-agfs@0.1.9
 PNPM_DEPS := $(TEMP_DIR)/pnpm-deps
 PNPM_MODULES := $(PNPM_DEPS)/node_modules
