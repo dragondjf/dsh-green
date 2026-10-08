@@ -1044,8 +1044,8 @@ ifeq ($(TARGET_PLATFORM),win7)
 	fi
 	@echo "Archive created: $(PACK_NAME)-win7-$(NODE_VERSION)-$(DSH_VERSION).zip"
 else
-	@cd "$(CURDIR)" && tar -czf "$(PACK_NAME)-$(PLATFORM)-$(NODE_VERSION).tar.gz" "$(PACK_NAME)" 2>/dev/null || echo "  Archive creation failed (tar not available?)"
-	@echo "Archive created: $(PACK_NAME)-$(PLATFORM)-$(NODE_VERSION).tar.gz"
+	@cd "$(CURDIR)" && tar -czf "$(PACK_NAME)-$(PLATFORM)-$(NODE_VERSION)-$(DSH_VERSION).tar.gz" "$(PACK_NAME)" 2>/dev/null || echo "  Archive creation failed (tar not available?)"
+	@echo "Archive created: $(PACK_NAME)-$(PLATFORM)-$(NODE_VERSION)-$(DSH_VERSION).tar.gz"
 endif
 
 # ---------- Full Build ----------

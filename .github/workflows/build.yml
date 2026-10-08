@@ -42,15 +42,15 @@ jobs:
           - name: linux-x64
             os: ubuntu-latest
             target: archive
-            asset: dsh-green-linux-v22.19.0.tar.gz
+            asset: dsh-green-linux-v22.19.0-0.2.0-rc.2.tar.gz
           - name: darwin-arm64
             os: macos-latest
             target: archive
-            asset: dsh-green-darwin-v22.19.0.tar.gz
+            asset: dsh-green-darwin-v22.19.0-0.2.0-rc.2.tar.gz
           - name: windows-x64
             os: windows-latest
             target: archive
-            asset: dsh-green-windows-v22.19.0.tar.gz
+            asset: dsh-green-windows-v22.19.0-0.2.0-rc.2.tar.gz
           - name: win7-x64
             os: windows-latest
             target: win7
