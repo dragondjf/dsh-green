@@ -28,7 +28,7 @@ const MARKER = "[dsh-green win7-compat]";
 const BOOT_DIR_NAME = "dsh-app-boot";
 const TARGETS = ["lib/index.js", "lib/worker/profile-resolution-bootstrap.js"];
 
-// ---- 精确替换片段(与 0.1.7-rc.2 bundle 逐字符对齐, tab 缩进) ----
+// ---- 精确替换片段(与 0.1.7-rc.2 / 0.2.0-rc.2 bundle 逐字符对齐, tab 缩进; 两版均实测命中) ----
 
 // A0. addon 加载失败容错(两文件文本一致): 包缺失时给出抛错 stub, 统一由 reqBuiltin 回退
 const OLD_ADDON_LOAD = '\tconst addon = createRequire(import.meta.url)("node-addon-require-builtin");';

@@ -1,6 +1,6 @@
 # DSH Green Pack (Windows 7) 构建注意事项
 
-> 适用对象：`dsh-green-win7-v22.22.3` 制品包的维护/重新打包。
+> 适用对象：`dsh-green-win7-v22.22.3-<dsh版本>` 制品包（如 `dsh-green-win7-v22.22.3-0.2.0-rc.2.zip`）的维护/重新打包。
 > 本文档基于一次真实的 Win7 启动故障排查（sharp `ERR_DLOPEN_FAILED`）整理。
 
 ---

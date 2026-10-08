@@ -54,7 +54,7 @@ jobs:
           - name: win7-x64
             os: windows-latest
             target: win7
-            asset: dsh-green-win7-v22.22.3.zip
+            asset: dsh-green-win7-v22.22.3-0.2.0-rc.2.zip
     steps:
       - name: Checkout
         uses: actions/checkout@v4

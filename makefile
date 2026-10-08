@@ -14,9 +14,10 @@ NODE_VERSION := v22.19.0
 # npm 全局安装很慢，默认改用 pnpm（node 自带 corepack，hoisted 扁平结构更快）。
 # 回退: make PKG_MANAGER=npm ... 使用原有 npm 全局安装流程
 PKG_MANAGER ?= pnpm
-# dsh 锁定 0.1.7-rc.2(npm dist-tag next, 发布候选线, 2026-09 当前最新 rc);
+# dsh 锁定 0.2.0-rc.2(npm dist-tag latest/next, 发布候选线, 2026-10 当前最新 rc);
 # 如需跟随正式线改回 @deepseek-ai/dsh@latest
-DSH_PKG := @deepseek-ai/dsh@0.1.7-rc.2
+DSH_VERSION := 0.2.0-rc.2
+DSH_PKG := @deepseek-ai/dsh@$(DSH_VERSION)
 AGFS_PKG := @open-agfs/dsh-agfs@0.1.9
 PNPM_DEPS := $(TEMP_DIR)/pnpm-deps
 PNPM_MODULES := $(PNPM_DEPS)/node_modules
@@ -158,7 +159,7 @@ ifeq ($(TARGET_PLATFORM),win7)
     NODE_PLATFORM := win-x64
     # 指定本地 node 压缩包，download-node 将直接解压
     NODE_LOCAL_ZIP := $(WIN7_NODE_ZIP)
-    # dsh 与主平台统一（0.1.7-rc.2）。0.1.7 的 dsh-app-boot 依赖 node-addon-require-builtin
+    # dsh 与主平台统一（DSH_VERSION）。0.1.7+ 的 dsh-app-boot 依赖 node-addon-require-builtin
     # 原生探测（V8 GetCurrentContext ABI 匹配），在 win7 兼容版 node v22.22.3 上失败
     # （Unsupported/no-context，boot 硬依赖无回退 -> 进程崩溃）。
     # 解决：pack 前执行 patch-win7-compat 目标给 dsh-app-boot 打降级补丁
@@ -1020,28 +1021,28 @@ archive: all
 	@echo "Creating archive..."
 ifeq ($(TARGET_PLATFORM),win7)
 	@echo "Creating zip archive..."
-	@rm -f "$(PACK_NAME)-win7-$(NODE_VERSION).zip"; \
+	@rm -f "$(PACK_NAME)-win7-$(NODE_VERSION)-$(DSH_VERSION).zip"; \
 	if [ "$(PLATFORM)" = "windows" ]; then \
 		if [ -f "/c/Windows/System32/tar.exe" ]; then \
 			echo "  Using Windows bsdtar (real zip)"; \
-			cd "$(CURDIR)" && /c/Windows/System32/tar.exe -a -cf "$(PACK_NAME)-win7-$(NODE_VERSION).zip" "$(PACK_NAME)" 2>/dev/null; \
+			cd "$(CURDIR)" && /c/Windows/System32/tar.exe -a -cf "$(PACK_NAME)-win7-$(NODE_VERSION)-$(DSH_VERSION).zip" "$(PACK_NAME)" 2>/dev/null; \
 		else \
 			echo "  Using PowerShell Compress-Archive"; \
-			cd "$(CURDIR)" && powershell -NoProfile -Command "Compress-Archive -Force -CompressionLevel Optimal -Path '$(subst \,/,$(PACK_DIR))' -DestinationPath '$(subst \,/,$(CURDIR))/$(PACK_NAME)-win7-$(NODE_VERSION).zip'"; \
+			cd "$(CURDIR)" && powershell -NoProfile -Command "Compress-Archive -Force -CompressionLevel Optimal -Path '$(subst \,/,$(PACK_DIR))' -DestinationPath '$(subst \,/,$(CURDIR))/$(PACK_NAME)-win7-$(NODE_VERSION)-$(DSH_VERSION).zip'"; \
 		fi; \
 	else \
 		echo "  Using zip"; \
-		cd "$(CURDIR)" && zip -r -q "$(PACK_NAME)-win7-$(NODE_VERSION).zip" "$(PACK_NAME)" 2>/dev/null || \
-			python3 -c "import shutil; shutil.make_archive('$(PACK_NAME)-win7-$(NODE_VERSION)', 'zip', root_dir='.', base_dir='$(PACK_NAME)')" 2>/dev/null || \
+		cd "$(CURDIR)" && zip -r -q "$(PACK_NAME)-win7-$(NODE_VERSION)-$(DSH_VERSION).zip" "$(PACK_NAME)" 2>/dev/null || \
+			python3 -c "import shutil; shutil.make_archive('$(PACK_NAME)-win7-$(NODE_VERSION)-$(DSH_VERSION)', 'zip', root_dir='.', base_dir='$(PACK_NAME)')" 2>/dev/null || \
 			echo "  ERROR: no zip tool available (install zip or python3)"; \
 	fi
-	@if [ -f "$(PACK_NAME)-win7-$(NODE_VERSION).zip" ]; then \
-		magic=$$(head -c 2 "$(PACK_NAME)-win7-$(NODE_VERSION).zip" | od -An -tx1 | tr -d ' \n'); \
+	@if [ -f "$(PACK_NAME)-win7-$(NODE_VERSION)-$(DSH_VERSION).zip" ]; then \
+		magic=$$(head -c 2 "$(PACK_NAME)-win7-$(NODE_VERSION)-$(DSH_VERSION).zip" | od -An -tx1 | tr -d ' \n'); \
 		if [ "$$magic" = "504b" ]; then echo "  Verify: real ZIP (PK magic OK)"; else echo "  WARN: archive is NOT a valid zip (magic: $$magic)"; fi; \
 	else \
 		echo "  ERROR: archive file not created"; \
 	fi
-	@echo "Archive created: $(PACK_NAME)-win7-$(NODE_VERSION).zip"
+	@echo "Archive created: $(PACK_NAME)-win7-$(NODE_VERSION)-$(DSH_VERSION).zip"
 else
 	@cd "$(CURDIR)" && tar -czf "$(PACK_NAME)-$(PLATFORM)-$(NODE_VERSION).tar.gz" "$(PACK_NAME)" 2>/dev/null || echo "  Archive creation failed (tar not available?)"
 	@echo "Archive created: $(PACK_NAME)-$(PLATFORM)-$(NODE_VERSION).tar.gz"
